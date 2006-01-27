@@ -41,6 +41,7 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <syslog.h>
+#include <signal.h>
 
 #include <bsnmp/asn1.h>
 #include <bsnmp/snmp.h>
@@ -175,12 +176,33 @@ rb_message (int level, const char* msg, ...)
 static void
 usage()
 {
-    fprintf(stderr, "usage: rrdcollectd [-c confdir] [-w workdir] [-d level] [-p pidfile] [-r retries] [-t timeout]\n");
-    fprintf(stderr, "       rrdcollectd -v\n");
+    fprintf(stderr, "usage: rrdbotd [-c confdir] [-w workdir] [-d level] [-p pidfile] [-r retries] [-t timeout]\n");
+    fprintf(stderr, "       rrdbotd -v\n");
     exit(2);
 }
 
-#include <values.h>
+static void
+on_quit(int signal)
+{
+    fprintf(stderr, "rrdbotd: got signal to quit\n");
+    server_stop();
+}
+
+static void
+writepid(const char* pidfile)
+{
+    FILE* f = fopen(pidfile, "w");
+    if(f == NULL)
+    {
+        rb_message(LOG_WARNING, "couldn't open pid file: %s", pidfile);
+        return;
+    }
+
+    fprintf(f, "%d\n", (int)getpid());
+    if(ferror(f))
+        rb_message(LOG_WARNING, "couldn't write to pid file: %s", pidfile);
+    fclose(f);
+}
 
 int
 main(int argc, char* argv[])
@@ -270,11 +292,36 @@ main(int argc, char* argv[])
     rb_snmp_engine_init();
 
     if(daemonize)
-        warnx("TODO: daemon mode not implemented yet");
+    {
+        /* Fork a daemon nicely */
+        if(daemon(0, 0) == -1)
+            err("couldn't fork as a daemon");
+
+        rb_messagex(LOG_DEBUG, "running as a daemon");
+        daemonized = 1;
+    }
+
+    /* Handle signals */
+     signal(SIGPIPE, SIG_IGN);
+     signal(SIGHUP, SIG_IGN);
+     signal(SIGINT,  on_quit);
+     signal(SIGTERM, on_quit);
+     siginterrupt(SIGINT, 1);
+     siginterrupt(SIGTERM, 1);
+
+    /* Open the system log */
+    openlog("rrdbotd", 0, LOG_DAEMON);
+
+    if(pidfile != NULL)
+        writepid(pidfile);
+
+    rb_messagex(LOG_INFO, "rrdbotd version " VERSION " started up");
 
     /* Now let it go */
     if(server_run() == -1)
         err(1, "critical failure running SNMP engine");
+
+    rb_messagex(LOG_INFO, "rrdbotd stopping");
 
     /* Cleanups */
     rb_snmp_engine_uninit();
