@@ -1,0 +1,45 @@
+dnl Process this file with autoconf to produce a configure script.
+AC_INIT(rrdui, 0.2, nielsen@memberwebs.com)
+AM_INIT_AUTOMAKE(rrdui, 0.2)
+
+LDFLAGS="$LDFLAGS -L/usr/local/lib"
+CFLAGS="$CFLAGS -I/usr/local/include"
+
+AC_CONFIG_SRCDIR([src/rrdbotd.c])
+AM_CONFIG_HEADER([config.h])
+
+# Debug mode
+AC_ARG_ENABLE(debug, 
+	    AC_HELP_STRING([--enable-debug],
+	    [Compile binaries in debug mode]))
+
+if test "$enable_debug" = "yes"; then
+  	CFLAGS="$CFLAGS -g -O0"
+  	AC_DEFINE_UNQUOTED(_DEBUG, 1, [In debug mode])
+  	echo "enabling debug compile mode"
+fi
+
+dnl Check for programs.
+AC_PROG_CC
+AC_PROG_INSTALL
+AC_PROG_RANLIB
+
+dnl Checks for libraries
+AC_CHECK_LIB(rrd, rrd_update, ,
+    [echo "ERROR: librrd not found."; exit 1])
+
+dnl Checks for typedefs, structures, and compiler characteristics.
+AC_C_CONST
+AC_C_INLINE
+
+dnl Check for header files.
+AC_HEADER_STDC
+AC_CHECK_HEADERS([rrd.h], , [echo "ERROR: rrd headers not found"])
+dnl TODO: AC_CHECK_HEADERS
+
+AC_MSG_RESULT()
+
+AC_CONFIG_FILES([Makefile 
+    src/Makefile
+    src/bsnmp/Makefile])
+AC_OUTPUT
