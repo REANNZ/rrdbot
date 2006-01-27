@@ -49,9 +49,6 @@
 #include "stringx.h"
 #include "rrdbotd.h"
 
-/* TODO: Temporary */
-#include "snmpclient.h"
-
 /* -----------------------------------------------------------------------------
  * GLOBALS
  */

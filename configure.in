@@ -5,7 +5,7 @@ AM_INIT_AUTOMAKE(rrdui, 0.2)
 LDFLAGS="$LDFLAGS -L/usr/local/lib"
 CFLAGS="$CFLAGS -I/usr/local/include"
 
-AC_CONFIG_SRCDIR([src/rrdbotd.c])
+AC_CONFIG_SRCDIR([daemon/rrdbotd.c])
 AM_CONFIG_HEADER([config.h])
 
 # Debug mode
@@ -40,6 +40,6 @@ dnl TODO: AC_CHECK_HEADERS
 AC_MSG_RESULT()
 
 AC_CONFIG_FILES([Makefile 
-    src/Makefile
-    src/bsnmp/Makefile])
+    daemon/Makefile
+    bsnmp/Makefile])
 AC_OUTPUT
