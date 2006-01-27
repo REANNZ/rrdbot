@@ -8,5 +8,6 @@ rrdbotd_SOURCES = rrdbotd.c rrdbotd.h config.c usuals.h \
                 ../common/stringx.h ../common/stringx.c \
                 ../common/hash.h ../common/hash.c \
                 ../mib/parse.c
-rrdbotd_CFLAGS = -I${top_srcdir}/common/ -I${top_srcdir}/bsnmp/ -I${top_srcdir}
+rrdbotd_CFLAGS = -I${top_srcdir}/common/ -I${top_srcdir}/bsnmp/ -I${top_srcdir} \
+                 -DCONF_PREFIX=\"$(sysconfdir)\" -DDATA_PREFIX=\"$(datadir)\"
 rrdbotd_LDADD = $(top_builddir)/bsnmp/libbsnmp-custom.a

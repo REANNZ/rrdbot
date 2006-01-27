@@ -528,7 +528,7 @@ rb_config_parse()
 
     dir = opendir(g_state.confdir);
     if(!dir)
-        err("couldn't read config directory: %s", g_state.confdir);
+        err(1, "couldn't list config directory: %s", g_state.confdir);
 
     while((dire = readdir(dir)) != NULL)
     {
@@ -544,6 +544,9 @@ rb_config_parse()
 
         parse_config_file(configfile, &ctx);
     }
+
+    if(!g_state.polls)
+        errx(1, "no config files found in config directory: %s", g_state.confdir);
 
     closedir(dir);
 }

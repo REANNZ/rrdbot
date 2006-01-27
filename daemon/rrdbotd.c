@@ -52,6 +52,7 @@
 /* The default command line options */
 #define DEFAULT_CONFIG      CONF_PREFIX "/rrdbot"
 #define DEFAULT_WORK        "/var/db/rrdbot"
+#define DEFAULT_MIB         DATA_PREFIX "/mib"
 #define DEFAULT_RETRIES     3
 #define DEFAULT_TIMEOUT     5
 
@@ -63,6 +64,7 @@
 rb_state g_state;
 
 /* Whether we print warnings when loading MIBs or not */
+const char* g_mib_directory = DEFAULT_MIB;
 int g_mib_warnings = 0;
 
 /* Some logging flags */
@@ -207,9 +209,20 @@ rb_message (int level, const char* msg, ...)
 static void
 usage()
 {
-    fprintf(stderr, "usage: rrdbotd [-M] [-c confdir] [-w workdir] [-d level] [-p pidfile] [-r retries] [-t timeout]\n");
+    fprintf(stderr, "usage: rrdbotd [-M] [-c confdir] [-w workdir] [-m mibdir] \n");
+    fprintf(stderr, "               [-d level] [-p pidfile] [-r retries] [-t timeout]\n");
     fprintf(stderr, "       rrdbotd -v\n");
     exit(2);
+}
+
+static void
+version()
+{
+    printf("rrdbotd (version %s)\n", VERSION);
+    printf("   default config directory: %s\n", DEFAULT_CONFIG);
+    printf("   default work directory:   %s\n", DEFAULT_WORK);
+    printf("   default mib directory:    %s\n", DEFAULT_MIB);
+    exit(0);
 }
 
 static void
@@ -273,6 +286,11 @@ main(int argc, char* argv[])
             debug_level += LOG_ERR;
             break;
 
+        /* mib directory */
+        case 'm':
+            g_mib_directory = optarg;
+            break;
+
         /* MIB load warnings */
         case 'M':
             g_mib_warnings = 1;
@@ -304,8 +322,7 @@ main(int argc, char* argv[])
 
         /* Print version number */
         case 'v':
-            printf("rrdbotd (version %s)\n", VERSION);
-            exit(0);
+            version();
             break;
 
         /* Usage information */

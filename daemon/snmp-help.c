@@ -48,6 +48,7 @@
 
 /* Whether we print warnings when loading MIBs or not */
 extern int g_mib_warnings;
+extern const char* g_mib_directory;
 
 static int
 parse_mixed_mib(const char* mib, struct asn_oid* oid)
@@ -84,7 +85,7 @@ parse_mixed_mib(const char* mib, struct asn_oid* oid)
         if(*t || sub < 0)
         {
             /* Only initializes first time around */
-            rb_mib_init(g_mib_warnings);
+            rb_mib_init(g_mib_directory, g_mib_warnings);
 
             /*
              * If we haven't parsed anything yet, try a symbolic
@@ -154,7 +155,7 @@ rb_snmp_parse_mib(const char* mib, struct snmp_value* value)
     /* Next try a symolic search */
     if(ret == -1)
     {
-        rb_mib_init(g_mib_warnings);
+        rb_mib_init(g_mib_directory, g_mib_warnings);
 
         n = rb_mib_lookup(mib);
         if(n == NULL)

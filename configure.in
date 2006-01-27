@@ -37,13 +37,6 @@ AC_HEADER_STDC
 AC_CHECK_HEADERS([rrd.h], , [echo "ERROR: rrd headers not found"])
 dnl TODO: AC_CHECK_HEADERS
 
-# Have to resolve this for the path below
-if test "${prefix}" = "NONE"; then
-    prefix=$ac_default_prefix
-fi
-
-AC_DEFINE_UNQUOTED(CONF_PREFIX, "`eval echo ${sysconfdir}`", [Installation Prefix] )
-
 AC_MSG_RESULT()
 
 AC_CONFIG_FILES([Makefile 

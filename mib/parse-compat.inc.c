@@ -140,7 +140,7 @@ clear_tree_flags(struct tree *tp)
 }
 
 void
-rb_mib_init(int warnings)
+rb_mib_init(const char* dir, int warnings)
 {
     if(initialized)
         return;
@@ -148,7 +148,7 @@ rb_mib_init(int warnings)
     with_warnings = warnings;
 
     init_mib_internals();
-    add_mibdir("/usr/share/snmp/mibs");
+    add_mibdir(dir);
     read_all_mibs();
 
     rb_messagex(LOG_DEBUG, "loaded all MIB files");

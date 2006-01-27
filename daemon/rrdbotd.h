@@ -187,7 +187,7 @@ void rb_rrd_update(rb_poller *poll);
 
 typedef void* mib_node;
 
-void rb_mib_init(int warnings);
+void rb_mib_init(const char* dir, int warnings);
 mib_node rb_mib_lookup(const char* match);
 int rb_mib_subid(mib_node n, const char* name);
 void rb_mib_oid(mib_node n, struct asn_oid* oid);
