@@ -48,13 +48,44 @@
 #include "server-mainloop.h"
 
 /* The socket to use */
-int snmp_socket = -1;
+static int snmp_socket = -1;
 
 /* The last request: start at a strange number */
-uint32_t snmp_request = 0x0A0A0A0A;
+static uint32_t snmp_request = 0x0A0A0A0A;
 
 /* Since we only deal with one packet at a time, global buffer */
-unsigned char snmp_buffer[0x1000];
+static unsigned char snmp_buffer[0x1000];
+
+/* -----------------------------------------------------------------------------
+ * CONSTANTS
+ */
+
+/* All SNMP error messages */
+static struct
+{
+    int code;
+    const char* msg;
+} snmp_errmsgs[] = {
+    { SNMP_ERR_NOERROR, "Success" },
+    { SNMP_ERR_TOOBIG, "SNMP packet or response too big" },
+    { SNMP_ERR_NOSUCHNAME, "Unknown variable name" },
+    { SNMP_ERR_BADVALUE, "Incorrect syntax or value when modifing a variable" },
+    { SNMP_ERR_READONLY, "Value is readonly" },
+    { SNMP_ERR_GENERR, "Unspecified general error" },
+    { SNMP_ERR_NO_ACCESS, "Access was denied to the object" },
+    { SNMP_ERR_WRONG_TYPE, "The object type is incorrect for the object" },
+    { SNMP_ERR_WRONG_LENGTH, "Incorrect specified for the object." },
+    { SNMP_ERR_WRONG_ENCODING, "Incorrect encoding specified for the object." },
+    { SNMP_ERR_WRONG_VALUE, "Not possible to set this value for the object." },
+    { SNMP_ERR_NO_CREATION, "The value cannot be created." },
+    { SNMP_ERR_INCONS_VALUE, "Not possible to set the value at this time." },
+    { SNMP_ERR_RES_UNAVAIL, "The resource is not availeble" },
+    { SNMP_ERR_COMMIT_FAILED, "Commit failed" },
+    { SNMP_ERR_UNDO_FAILED, "Undo failed" },
+    { SNMP_ERR_AUTH_ERR, "A problem occured during authentication" },
+    { SNMP_ERR_NOT_WRITEABLE, "The variable cannot be written or created." },
+    { SNMP_ERR_INCONS_NAME, "The variable does not exist." }
+};
 
 /* -----------------------------------------------------------------------------
  * REQUESTS
@@ -345,7 +376,7 @@ respond_req(rb_request* req, struct snmp_pdu* pdu, mstime when)
                 case SNMP_SYNTAX_NOSUCHOBJECT:
                 case SNMP_SYNTAX_NOSUCHINSTANCE:
                 case SNMP_SYNTAX_ENDOFMIBVIEW:
-                    msg = "value not available on snmp server for field: %s";
+                    msg = "field not available on snmp server: %s";
                     break;
                 default:
                     msg = "snmp server returned invalid or unsupported value for field: %s";
@@ -480,7 +511,8 @@ receive_resp(int fd, int type, void* arg)
     struct snmp_pdu pdu;
     struct asn_buf b;
     rb_request* req;
-    int len, ret;
+    const char* msg;
+    int len, ret, i;
     int32_t ip;
 
     ASSERT(snmp_socket == fd);
@@ -515,22 +547,34 @@ receive_resp(int fd, int type, void* arg)
         return;
     }
 
-    /* Lookup and check the request properly */
-
+    /* It needs to match something we're waiting for */
     req = find_req(pdu.request_id);
     if(!req)
         return;
 
+    /* Check for errors */
     if(pdu.error_status != SNMP_ERR_NOERROR)
     {
-        /* TODO: Textual errors */
-        rb_message(LOG_ERR, "snmp error '%d' from host: %s", pdu.error_status, hostname);
+        msg = NULL;
+        for(i = 0; i < countof(snmp_errmsgs); i++)
+        {
+            if(pdu.error_status == snmp_errmsgs[i].code)
+            {
+                rb_message(LOG_ERR, "snmp error from host '%s': %s",
+                           hostname, snmp_errmsgs[i].msg);
+                return;
+            }
+        }
+
+        rb_message(LOG_ERR, "unknown snmp error from host '%s': %d",
+                   hostname, pdu.error_status);
         return;
     }
 
     if(pdu.version != req->pdu.version)
         rb_message(LOG_WARNING, "wrong version snmp packet from: %s", hostname);
 
+    /* Dispatch the packet */
     rb_messagex(LOG_DEBUG, "response to request '%d' from: %s", req->id, hostname);
     respond_req(req, &pdu, server_get_time());
 }
