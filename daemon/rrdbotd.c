@@ -62,9 +62,40 @@
 /* The one main state object */
 rb_state g_state;
 
+/* Whether we print warnings when loading MIBs or not */
+int g_mib_warnings = 0;
+
 /* Some logging flags */
 static int daemonized = 0;
 static int debug_level = LOG_ERR;
+
+#include "mib/parse.h"
+
+static void
+test(int argc, char* argv[])
+{
+    struct snmp_value val;
+    mib_node n, n2;
+
+    debug_level = 4;
+
+    if(argc < 2)
+        errx(2, "specify arguments");
+
+    while(argc > 1)
+    {
+        if(rb_snmp_parse_mib(argv[1], &val) == -1)
+            warnx("couldn't parse mib value: %s", argv[1]);
+        else
+            fprintf(stderr, "the oid is: %s\n", asn_oid2str(&(val.var)));
+
+        argc--;
+        argv++;
+    }
+
+    rb_mib_uninit();
+    exit(1);
+}
 
 /* -----------------------------------------------------------------------------
  * CLEANUP
@@ -120,8 +151,8 @@ rb_atexit(voidfunc func, void* data)
  * LOGGING
  */
 
-static void
-vmessage (int level, int err, const char* msg, va_list ap)
+void
+rb_vmessage(int level, int err, const char* msg, va_list ap)
 {
     #define MAX_MSGLEN  1024
     char buf[MAX_MSGLEN];
@@ -156,7 +187,7 @@ rb_messagex (int level, const char* msg, ...)
 {
     va_list ap;
     va_start(ap, msg);
-    vmessage(level, 0, msg, ap);
+    rb_vmessage(level, 0, msg, ap);
     va_end(ap);
 }
 
@@ -165,7 +196,7 @@ rb_message (int level, const char* msg, ...)
 {
     va_list ap;
     va_start(ap, msg);
-    vmessage(level, 1, msg, ap);
+    rb_vmessage(level, 1, msg, ap);
     va_end(ap);
 }
 
@@ -176,7 +207,7 @@ rb_message (int level, const char* msg, ...)
 static void
 usage()
 {
-    fprintf(stderr, "usage: rrdbotd [-c confdir] [-w workdir] [-d level] [-p pidfile] [-r retries] [-t timeout]\n");
+    fprintf(stderr, "usage: rrdbotd [-M] [-c confdir] [-w workdir] [-d level] [-p pidfile] [-r retries] [-t timeout]\n");
     fprintf(stderr, "       rrdbotd -v\n");
     exit(2);
 }
@@ -212,6 +243,8 @@ main(int argc, char* argv[])
     char ch;
     char* t;
 
+    /* test(argc, argv); */
+
     /* Initialize the state stuff */
     memset(&g_state, 0, sizeof(g_state));
 
@@ -221,7 +254,7 @@ main(int argc, char* argv[])
     g_state.timeout = DEFAULT_TIMEOUT;
 
     /* Parse the arguments nicely */
-    while((ch = getopt(argc, argv, "c:d:p:r:t:w:v")) != -1)
+    while((ch = getopt(argc, argv, "c:d:Mp:r:t:w:v")) != -1)
     {
         switch(ch)
         {
@@ -238,6 +271,11 @@ main(int argc, char* argv[])
             if(*t || debug_level > 4)
                 errx(1, "invalid debug log level: %s", optarg);
             debug_level += LOG_ERR;
+            break;
+
+        /* MIB load warnings */
+        case 'M':
+            g_mib_warnings = 1;
             break;
 
         /* Write out a pid file */
@@ -289,6 +327,11 @@ main(int argc, char* argv[])
 
     /* Parse config and setup SNMP system */
     rb_config_parse();
+
+    /* As an optimization we unload the MIB processing data here */
+    rb_mib_uninit();
+
+    /* Rev up the main engine */
     rb_snmp_engine_init();
 
     if(daemonize)
@@ -302,12 +345,12 @@ main(int argc, char* argv[])
     }
 
     /* Handle signals */
-     signal(SIGPIPE, SIG_IGN);
-     signal(SIGHUP, SIG_IGN);
-     signal(SIGINT,  on_quit);
-     signal(SIGTERM, on_quit);
-     siginterrupt(SIGINT, 1);
-     siginterrupt(SIGTERM, 1);
+    signal(SIGPIPE, SIG_IGN);
+    signal(SIGHUP, SIG_IGN);
+    signal(SIGINT,  on_quit);
+    signal(SIGTERM, on_quit);
+    siginterrupt(SIGINT, 1);
+    siginterrupt(SIGTERM, 1);
 
     /* Open the system log */
     openlog("rrdbotd", 0, LOG_DAEMON);

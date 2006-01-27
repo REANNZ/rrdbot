@@ -46,9 +46,13 @@
 #include "stringx.h"
 #include "rrdbotd.h"
 
+/* Whether we print warnings when loading MIBs or not */
+extern int g_mib_warnings;
+
 static int
-parse_numeric_mib(const char* mib, struct asn_oid* oid)
+parse_mixed_mib(const char* mib, struct asn_oid* oid)
 {
+    mib_node n;
     int ret = 0;
     unsigned int sub;
     char* next;
@@ -58,37 +62,67 @@ parse_numeric_mib(const char* mib, struct asn_oid* oid)
 
     memset(oid, 0, sizeof(*oid));
 
-    copy = src = strdup(mib);
-    if(!src)
+    copy = strdup(mib);
+    if(!copy)
+    {
+        errno = ENOMEM;
         return -1;
+    }
 
-    while(src && *src)
+    for(src = copy; src && *src; src = next)
     {
         next = strchr(src, '.');
         if(next)
+        {
             *next = 0;
+            next++;
+        }
 
         sub = strtoul(src, &t, 10);
+
+        /* An invalid number, try getting a named MIB */
+        if(*t || sub < 0)
+        {
+            /* Only initializes first time around */
+            rb_mib_init(g_mib_warnings);
+
+            /*
+             * If we haven't parsed anything yet, try a symbolic
+             * search for root
+             */
+
+            if(oid->len == 0)
+            {
+                n = rb_mib_lookup(src);
+                if(n)
+                {
+                    /* That took care of it */
+                    rb_mib_oid(n, oid);
+                    continue;
+                }
+            }
+
+            /* Try a by name search for sub item */
+            n = rb_mib_node(oid);
+            if(n == NULL)
+                sub = -1;
+            else
+                sub = rb_mib_subid(n, src);
+        }
+
+        /* Make sure this is a valid part */
+        if(sub < 0 || (oid->len == 0 && sub < 1) || sub >= ASN_MAXID)
+            ret = -1;
 
         /* Too many parts */
         if(oid->len > ASN_MAXOIDLEN)
             ret = -1;
-
-        /* An invalid number */
-        if(*t)
-            ret = -1;
-
-        /* Make sure this is a valid part */
-        if((oid->len == 0 && sub < 1) || sub < 0 || sub >= ASN_MAXID)
-            ret -1;
 
         if(ret < 0)
             break;
 
         oid->subs[oid->len] = sub;
         oid->len++;
-
-        src = next ? next + 1 : NULL;
     }
 
     free(copy);
@@ -96,16 +130,39 @@ parse_numeric_mib(const char* mib, struct asn_oid* oid)
 }
 
 int
-rb_parse_mib(const char* mib, struct snmp_value* value)
+rb_snmp_parse_mib(const char* mib, struct snmp_value* value)
 {
-    /*
-     * TODO: Eventually we'll have code here to parse symbolic
-     * names, and initialize snmp_value to the right type and
-     * all that jazz. For now we just have numeric OID support.
-     */
+    int ret;
+    mib_node n;
 
     value->syntax = SNMP_SYNTAX_NULL;
     memset(&(value->v), 0, sizeof(value->v));
 
-    return parse_numeric_mib(mib, &(value->var));
+    /* An initial dot */
+    if(*mib == '.')
+        mib++;
+
+    /*
+     * First try parsing a numeric OID. This will fall
+     * back to mixed mode MIB's if necassary. Allows us
+     * to avoid loading all the MIB files when not
+     * necessary
+     */
+
+    ret = parse_mixed_mib(mib, &(value->var));
+
+    /* Next try a symolic search */
+    if(ret == -1)
+    {
+        rb_mib_init(g_mib_warnings);
+
+        n = rb_mib_lookup(mib);
+        if(n == NULL)
+            return -1;
+
+        rb_mib_oid(n, &(value->var));
+        return 0;
+    }
+
+    return ret;
 }

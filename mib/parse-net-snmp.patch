@@ -1,0 +1,184 @@
+--- parse.c.orig	2006-01-27 14:11:27.000000000
++++ parse.c	2006-01-27 15:20:14.000000000 
+@@ -1,4 +1,11 @@
+ /*
++ * Nate Nielsen
++ * 
++ * Borrowed from net-snmp. Cleaned up a bit (see parse-net-snmp.patch)
++ * and readied for inclusion in rrdbot. Most of the additional code
++ * is at the top.
++ */
++/*
+  * parse.c
+  *
+  * Update: 1998-09-22 <mslifcak@iss.net>
+@@ -47,75 +54,29 @@
+  * Use is subject to license terms specified in the COPYING file
+  * distributed with the Net-SNMP package.
+  */
+-#include <net-snmp/net-snmp-config.h>
+ 
+-#include <stdio.h>
+-#if HAVE_STDLIB_H
++/* -----------------------------------------------------------------------------
++ * ADDITIONAL RRDBOT COMPATIBILITY CODE 
++ */
++ 
++#include <sys/types.h>
+ #include <stdlib.h>
+-#endif
+-#if HAVE_STRING_H
++#include <stdio.h>
+ #include <string.h>
+-#else
+-#include <strings.h>
+-#endif
+-#include <ctype.h>
+-#include <sys/types.h>
+-#include <sys/stat.h>
++#include <dirent.h>
++#include <syslog.h>
+ 
+-/*
+- * Wow.  This is ugly.  -- Wes 
++#include "parse.h"
++
++/* 
++ * A file with compatibility definitions for making the following 
++ * code work without the net-snmp library and all that.
+  */
+-#if HAVE_DIRENT_H
+-# include <dirent.h>
+-# define NAMLEN(dirent) strlen((dirent)->d_name)
+-#else
+-# define dirent direct
+-# define NAMLEN(dirent) (dirent)->d_namlen
+-# if HAVE_SYS_NDIR_H
+-#  include <sys/ndir.h>
+-# endif
+-# if HAVE_SYS_DIR_H
+-#  include <sys/dir.h>
+-# endif
+-# if HAVE_NDIR_H
+-#  include <ndir.h>
+-# endif
+-#endif
+-#if TIME_WITH_SYS_TIME
+-# ifdef WIN32
+-#  include <sys/timeb.h>
+-# else
+-#  include <sys/time.h>
+-# endif
+-# include <time.h>
+-#else
+-# if HAVE_SYS_TIME_H
+-#  include <sys/time.h>
+-# else
+-#  include <time.h>
+-# endif
+-#endif
+-#if HAVE_WINSOCK_H
+-#include <winsock.h>
+-#endif
+-#if HAVE_NETINET_IN_H
+-#include <netinet/in.h>
+-#endif
+-#if defined(HAVE_REGEX_H) && defined(HAVE_REGCOMP)
+-#include <regex.h>
+-#endif
+-#if HAVE_DMALLOC_H
+-#include <dmalloc.h>
+-#endif
++#include "parse-compat.inc.c"
++
++/* -------------------------------------------------------------------------- */
++
+ 
+-#include <net-snmp/types.h>
+-#include <net-snmp/output_api.h>
+-#include <net-snmp/config_api.h>
+-#include <net-snmp/utilities.h>
+-
+-#include <net-snmp/library/parse.h>
+-#include <net-snmp/library/mib.h>
+-#include <net-snmp/library/snmp_api.h>
+ 
+ /*
+  * This is one element of an object identifier with either an integer
+@@ -138,8 +99,8 @@
+     struct range_list *ranges;
+ } tclist[MAXTC];
+ 
+-int             mibLine = 0;
+-const char     *File = "(none)";
++static int             mibLine = 0;
++static const char     *File = "(none)";
+ static int      anonymous = 0;
+ 
+ struct objgroup {
+@@ -4569,51 +4530,8 @@
+     char            token[MAXTOKEN], token2[MAXTOKEN];
+     char            tmpstr[300];
+     int             count = 0;
+-#if !(defined(WIN32) || defined(cygwin))
+-    char space;
+-    char newline;
+-    struct stat     dir_stat, idx_stat;
+-    char            tmpstr1[300];
+-#endif
+ 
+     DEBUGMSGTL(("parse-mibs", "Scanning directory %s\n", dirname));
+-#if !(defined(WIN32) || defined(cygwin))
+-    snprintf(token, sizeof(token), "%s/%s", dirname, ".index");
+-    token[ sizeof(token)-1 ] = 0;
+-    if (stat(token, &idx_stat) == 0 && stat(dirname, &dir_stat) == 0) {
+-        if (dir_stat.st_mtime < idx_stat.st_mtime) {
+-            DEBUGMSGTL(("parse-mibs", "The index is good\n"));
+-            if ((ip = fopen(token, "r")) != NULL) {
+-                while (fscanf(ip, "%127s%c%299s%c", token, &space, tmpstr,
+-		    &newline) == 4) {
+-
+-		    /*
+-		     * If an overflow of the token or tmpstr buffers has been
+-		     * found log a message and break out of the while loop,
+-		     * thus the rest of the file tokens will be ignored.
+-		     */
+-		    if (space != ' ' || newline != '\n') {
+-			snmp_log(LOG_ERR,
+-			    "add_mibdir: strings scanned in from %s/%s " \
+-			    "are too large.  count = %d\n ", dirname,
+-			    ".index", count);
+-			    break;
+-		    }
+-		   
+-		    snprintf(tmpstr1, sizeof(tmpstr1), "%s/%s", dirname, tmpstr);
+-                    tmpstr1[ sizeof(tmpstr1)-1 ] = 0;
+-                    new_module(token, tmpstr1);
+-                    count++;
+-                }
+-                fclose(ip);
+-                return count;
+-            } else
+-                DEBUGMSGTL(("parse-mibs", "Can't read index\n"));
+-        } else
+-            DEBUGMSGTL(("parse-mibs", "Index outdated\n"));
+-    } else
+-        DEBUGMSGTL(("parse-mibs", "No index\n"));
+-#endif
+ 
+     if ((dir = opendir(dirname))) {
+         snprintf(tmpstr, sizeof(tmpstr), "%s/.index", dirname);
+--- parse.h.orig	2003-05-08 11:32:04.000000000 
++++ parse.h	2006-01-27 12:56:14.000000000 
+@@ -119,11 +119,6 @@
+         struct varbind_list *varbinds;
+         char           *hint;
+         char           *units;
+-        int             (*printomat) (u_char **, size_t *, size_t *, int,
+-                                      const netsnmp_variable_list *,
+-                                      const struct enum_list *, const char *,
+-                                      const char *);
+-        void            (*printer) (char *, const netsnmp_variable_list *, const struct enum_list *, const char *, const char *);   /* Value printing function */
+         char           *description;    /* description (a quoted string) */
+         int             reported;       /* 1=report started in print_subtree... */
+         char           *defaultValue;

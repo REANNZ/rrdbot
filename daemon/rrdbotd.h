@@ -41,6 +41,7 @@
 
 #include <values.h>
 #include <stdint.h>
+#include <stdarg.h>
 
 #include "asn1.h"
 #include "snmp.h"
@@ -147,8 +148,9 @@ extern rb_state g_state;
  * UTILITIES (rrdbotd.c)
  */
 
-void rb_messagex (int level, const char* msg, ...);
-void rb_message (int level, const char* msg, ...);
+void rb_messagex(int level, const char* msg, ...);
+void rb_message(int level, const char* msg, ...);
+void rb_vmessage(int level, int err, const char* msg, va_list ap);
 
 typedef void (*voidfunc)(void*);
 void rb_atexit (voidfunc func, void* data);
@@ -178,5 +180,18 @@ void rb_snmp_engine_uninit();
  */
 
 void rb_rrd_update(rb_poller *poll);
+
+/* -----------------------------------------------------------------------------
+ * MIB PARSING
+ */
+
+typedef void* mib_node;
+
+void rb_mib_init(int warnings);
+mib_node rb_mib_lookup(const char* match);
+int rb_mib_subid(mib_node n, const char* name);
+void rb_mib_oid(mib_node n, struct asn_oid* oid);
+mib_node rb_mib_node(struct asn_oid* oid);
+void rb_mib_uninit();
 
 #endif /* __RRDBOTD_H__ */

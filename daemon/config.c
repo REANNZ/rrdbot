@@ -233,6 +233,9 @@ parse_uri(char *uri, char** scheme, char** host,
 
     *path = uri;
 
+    while((*path)[0] == '/')
+        (*path)++;
+
     /* This copy only for error messages */
     free(copy);
 }
@@ -303,8 +306,11 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
     ritem->value = RB_UNKNOWN;
 
     /* And parse the OID */
-    if(rb_parse_mib(path, &(ritem->snmpfield)) == -1)
-        errx(2, "%s: invalid OID: %s", ctx->confname, path + 1);
+    if(rb_snmp_parse_mib(path, &(ritem->snmpfield)) == -1)
+        errx(2, "%s: invalid MIB: %s", ctx->confname, path);
+
+    rb_messagex(LOG_DEBUG, "parsed MIB into oid: %s -> %s", path,
+                asn_oid2str(&(ritem->snmpfield.var)));
 
     /* And add it to the list */
     ritem->next = ctx->items;

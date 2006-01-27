@@ -6,6 +6,7 @@ rrdbotd_SOURCES = rrdbotd.c rrdbotd.h config.c usuals.h \
                 ../common/server-mainloop.c ../common/server-mainloop.h \
                 ../common/sock-any.h ../common/sock-any.c \
                 ../common/stringx.h ../common/stringx.c \
-                ../common/hash.h ../common/hash.c
+                ../common/hash.h ../common/hash.c \
+                ../mib/parse.c
 rrdbotd_CFLAGS = -I${top_srcdir}/common/ -I${top_srcdir}/bsnmp/ -I${top_srcdir}
 rrdbotd_LDADD = $(top_builddir)/bsnmp/libbsnmp-custom.a
