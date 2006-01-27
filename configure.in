@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
-AC_INIT(rrdui, 0.2, nielsen@memberwebs.com)
-AM_INIT_AUTOMAKE(rrdui, 0.2)
+AC_INIT(rrdbot, 0.2, nielsen@memberwebs.com)
+AM_INIT_AUTOMAKE(rrdbot, 0.2)
 
 LDFLAGS="$LDFLAGS -L/usr/local/lib"
 CFLAGS="$CFLAGS -I/usr/local/include"
