@@ -323,7 +323,7 @@ respond_req(rb_request* req, struct snmp_pdu* pdu, mstime when)
                 const char *msg = NULL;
                 switch(value->syntax)
                 {
-	            case SNMP_SYNTAX_NULL:
+                case SNMP_SYNTAX_NULL:
                     item->value = RB_UNKNOWN;
                     break;
                 case SNMP_SYNTAX_INTEGER:
@@ -541,7 +541,7 @@ resend_timer(mstime when, void* arg)
     int i;
 
     /* Search forwards through the scrolling window */
-    for(i = (reqlow + 1) % nrequests; i <= reqhigh;
+    for(i = (reqlow + 1) % nrequests; i != reqhigh;
         i = (i + 1) % nrequests)
     {
         if(requests[i].id)
