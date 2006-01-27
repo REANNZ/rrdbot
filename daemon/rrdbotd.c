@@ -62,7 +62,7 @@
 /* The one main state object */
 rb_state g_state;
 
-/* TODO: These should be set from the command line */
+/* Some logging flags */
 static int daemonized = 0;
 static int debug_level = LOG_ERR;
 

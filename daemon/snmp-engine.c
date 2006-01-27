@@ -248,8 +248,6 @@ finish_poll(rb_poller* poll, mstime when)
     /* Update the book-keeping */
     poll->last_polled = when;
 
-    rb_messagex(LOG_DEBUG, "collected poll values. sending them to rrd");
-
     /* And send off our collection of values */
     rb_rrd_update(poll);
 }
@@ -464,8 +462,8 @@ poller_timer(mstime when, void* arg)
             req->poll = poll;
             req->host = it->host;
 
-            rb_messagex(LOG_DEBUG, "preparing request '%d' for: %s@%s",
-                        req->id, req->host->community, req->host->name);
+            /* rb_messagex(LOG_DEBUG, "preparing request '%d' for: %s@%s",
+                        req->id, req->host->community, req->host->name); */
 
             /* Setup the packet */
             strlcpy(req->pdu.community, req->host->community, sizeof(req->pdu.community));
@@ -533,8 +531,6 @@ receive_resp(int fd, int type, void* arg)
     if(sock_any_ntop(&from, hostname, MAXPATHLEN, 0) == -1)
         strcpy(hostname, "[UNKNOWN]");
 
-    rb_messagex(LOG_DEBUG, "received packet from: %s", hostname);
-
     /* Now parse the packet */
 
     b.asn_ptr = snmp_buffer;
@@ -550,7 +546,10 @@ receive_resp(int fd, int type, void* arg)
     /* It needs to match something we're waiting for */
     req = find_req(pdu.request_id);
     if(!req)
+    {
+        rb_messagex(LOG_DEBUG, "received extra or delayed packet from: %s", hostname);
         return;
+    }
 
     /* Check for errors */
     if(pdu.error_status != SNMP_ERR_NOERROR)
