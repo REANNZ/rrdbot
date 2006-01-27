@@ -67,6 +67,7 @@ config_ctx;
 
 #define CONFIG_POLL "poll"
 #define CONFIG_INTERVAL "interval"
+#define CONFIG_TIMEOUT "timeout"
 #define CONFIG_FIELD "field."
 #define CONFIG_SNMP "snmp"
 
@@ -323,15 +324,30 @@ config_value(const char* header, const char* name, char* value,
         int i;
 
         if(ctx->interval > 0)
-            errx(2, "%s: " CONFIG_INTERVAL " specified twice: %s",
-                 ctx->confname, value);
+            errx(2, "%s: " CONFIG_INTERVAL " specified twice: %s", ctx->confname, value);
 
         i = strtol(value, &t, 10);
-        if(i < 1)
-            err(2, "%s: " CONFIG_INTERVAL " must be a positive number: %s",
+        if(i < 1 || *t)
+            errx(2, "%s: " CONFIG_INTERVAL " must be a number (seconds) greater than zero: %s",
                 ctx->confname, value);
 
         ctx->interval = (uint32_t)i;
+    }
+
+    if(strcmp(name, CONFIG_TIMEOUT) == 0)
+    {
+        char* t;
+        int i;
+
+        if(ctx->timeout > 0)
+            errx(2, "%s: " CONFIG_TIMEOUT " specified twice: %s", ctx->confname, value);
+
+        i = strtol(value, &t, 10);
+        if(i < 1 || *t)
+            errx(2, "%s: " CONFIG_TIMEOUT " must be a a number (seconds) greater than zero: %s",
+                ctx->confname, value);
+
+        ctx->timeout = (uint32_t)i;
     }
 
     /* If it starts with "field." */
