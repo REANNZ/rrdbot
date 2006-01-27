@@ -48,6 +48,12 @@
 #include "stringx.h"
 #include "rrdbotd.h"
 
+/* The default command line options */
+#define DEFAULT_CONFIG      CONF_PREFIX "/rrdbot"
+#define DEFAULT_WORK        "/var/db/rrdbot"
+#define DEFAULT_RETRIES     3
+#define DEFAULT_TIMEOUT     5
+
 /* -----------------------------------------------------------------------------
  * GLOBALS
  */
@@ -57,7 +63,7 @@ rb_state g_state;
 
 /* TODO: These should be set from the command line */
 static int daemonized = 0;
-static int debug_level = 7;
+static int debug_level = LOG_ERR;
 
 /* -----------------------------------------------------------------------------
  * CLEANUP
@@ -169,7 +175,7 @@ rb_message (int level, const char* msg, ...)
 static void
 usage()
 {
-    fprintf(stderr, "usage: rrdcollectd\n");
+    fprintf(stderr, "usage: rrdcollectd [-c confdir] [-w workdir] [-d level] [-p pidfile] [-r retries] [-t timeout]\n");
     fprintf(stderr, "       rrdcollectd -v\n");
     exit(2);
 }
@@ -179,27 +185,66 @@ usage()
 int
 main(int argc, char* argv[])
 {
-    int daemonize;
+    const char* pidfile = NULL;
+    int daemonize = 1;
     char ch;
+    char* t;
 
     /* Initialize the state stuff */
     memset(&g_state, 0, sizeof(g_state));
 
-    /* TODO: These should come from configure, and from arguments */
-    g_state.rrddir = "/data/projects/rrdui/work";
-    g_state.confdir = "/data/projects/rrdui/conf";
-    g_state.retries = 3;
-    g_state.timeout = 5;
+    g_state.rrddir = DEFAULT_WORK;
+    g_state.confdir = DEFAULT_CONFIG;
+    g_state.retries = DEFAULT_RETRIES;
+    g_state.timeout = DEFAULT_TIMEOUT;
 
-	/* Parse the arguments nicely */
-	while((ch = getopt(argc, argv, "v")) != -1)
-	{
-		switch(ch)
-		{
+    /* Parse the arguments nicely */
+    while((ch = getopt(argc, argv, "c:d:p:r:t:w:v")) != -1)
+    {
+        switch(ch)
+        {
+
+        /* Config directory */
+        case 'c':
+            g_state.confdir = optarg;
+            break;
+
+        /* Don't daemonize */
+        case 'd':
+            daemonize = 0;
+            debug_level = strtol(optarg, &t, 10);
+            if(*t || debug_level > 4)
+                errx(1, "invalid debug log level: %s", optarg);
+            debug_level += LOG_ERR;
+            break;
+
+        /* Write out a pid file */
+        case 'p':
+            pidfile = optarg;
+            break;
+
+        /* The number of SNMP retries */
+        case 'r':
+            g_state.retries = strtol(optarg, &t, 10);
+            if(*t || g_state.retries < 0)
+                errx(1, "invalid number of retries: %s", optarg);
+            break;
+
+        /* The default timeout */
+        case 't':
+            g_state.timeout = strtol(optarg, &t, 10);
+            if(*t || g_state.timeout <= 0)
+                errx(1, "invalid timeout (must be above zero): %s", optarg);
+            break;
+
+        /* The work directory */
+        case 'w':
+            g_state.rrddir = optarg;
+            break;
 
         /* Print version number */
         case 'v':
-            printf("rrdcollectd (version %s)\n", VERSION);
+            printf("rrdbotd (version %s)\n", VERSION);
             exit(0);
             break;
 
@@ -209,10 +254,13 @@ main(int argc, char* argv[])
             usage();
             break;
         }
-	}
+    }
 
     argc -= optind;
     argv += optind;
+
+    if(argc != 0)
+        usage();
 
     /* The mainloop server */
     server_init();
@@ -220,6 +268,9 @@ main(int argc, char* argv[])
     /* Parse config and setup SNMP system */
     rb_config_parse();
     rb_snmp_engine_init();
+
+    if(daemonize)
+        warnx("TODO: daemon mode not implemented yet");
 
     /* Now let it go */
     if(server_run() == -1)
@@ -230,6 +281,5 @@ main(int argc, char* argv[])
     rb_config_free();
     server_uninit();
 
-	return 0;
+    return 0;
 }
-
