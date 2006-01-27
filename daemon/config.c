@@ -132,7 +132,7 @@ config_done(config_ctx* ctx)
 
     /* Make sure we found an interval */
     if(ctx->interval == 0)
-        errx(2, "no interval specified in config file: %s", ctx->confname);
+        errx(2, "%s: no interval specified", ctx->confname);
 
     if(ctx->timeout == 0)
         ctx->timeout = g_state.timeout;
@@ -205,10 +205,10 @@ parse_uri(char *uri, char** scheme, char** host,
 
     *scheme = strsep(&uri, ":");
     if(uri == NULL)
-        errx(2, "invalid poll uri (scheme invalid): %s", copy);
+        errx(2, "%s: invalid poll uri (scheme invalid): %s", ctx->confname, copy);
 
     if((uri[0] != '/' && uri[1] != '/'))
-        errx(2, "invalid poll uri (scheme invalid): %s", copy);
+        errx(2, "%s: invalid poll uri (scheme invalid): %s", ctx->confname, copy);
 
     uri += 2;
     *host = strsep(&uri, "/");
@@ -225,10 +225,10 @@ parse_uri(char *uri, char** scheme, char** host,
     }
 
     if(!*host[0])
-        errx(2, "invalid poll uri (no hostname found): %s", copy);
+        errx(2, "%s: invalid poll uri (no hostname found): %s", ctx->confname, copy);
 
     if(!uri || !uri[0] || !uri[1])
-        errx(2, "invalid poll uri (no pathname found): %s", copy);
+        errx(2, "%s: invalid poll uri (no pathname found): %s", ctx->confname, copy);
 
     *path = uri;
 
@@ -255,7 +255,7 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
 
     /* Currently we only support SNMP pollers */
     if(strcmp(scheme, CONFIG_SNMP) != 0)
-        errx(2, "invalid poll scheme: %s", scheme);
+        errx(2, "%s: invalid poll scheme: %s", ctx->confname, scheme);
 
     /* TODO: THis code assumes all hosts have the same community
        the lookups below won't work wehn host/community is different */
@@ -303,7 +303,7 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
 
     /* And parse the OID */
     if(rb_parse_mib(path, &(ritem->snmpfield)) == -1)
-        errx(2, "invalid OID: %s", path + 1);
+        errx(2, "%s: invalid OID: %s", ctx->confname, path + 1);
 
     /* And add it to the list */
     ritem->next = ctx->items;
@@ -323,11 +323,13 @@ config_value(const char* header, const char* name, char* value,
         int i;
 
         if(ctx->interval > 0)
-            errx(2, CONFIG_INTERVAL " specified twice: %s", value);
+            errx(2, "%s: " CONFIG_INTERVAL " specified twice: %s",
+                 ctx->confname, value);
 
         i = strtol(value, &t, 10);
         if(i < 1)
-            err(2, CONFIG_INTERVAL " must be a positive number: %s", value);
+            err(2, "%s: " CONFIG_INTERVAL " must be a positive number: %s",
+                ctx->confname, value);
 
         ctx->interval = (uint32_t)i;
     }
@@ -343,7 +345,8 @@ config_value(const char* header, const char* name, char* value,
         field = name + KL(CONFIG_FIELD);
         t = field + strspn(field, FIELD_VALID);
         if(*t)
-            err(2, "the '%s' field name must only contain characters, digits, underscore and dash", field);
+            err(2, "%s: the '%s' field name must only contain characters, digits, underscore and dash",
+                ctx->confname, field);
 
         /* Parse out the field */
         parse_item(field, value, ctx);
@@ -420,7 +423,8 @@ parse_config_file(const char* configfile, config_ctx *ctx)
         if(p < t && *t)
         {
             if(!value)
-                errx(2, "invalid continuation in config: %s", p);
+                errx(2, "%s: invalid continuation in config: %s",
+                     ctx->confname, p);
 
             /* Calculate the end of the current value */
             t = value + strlen(value);
@@ -436,7 +440,8 @@ parse_config_file(const char* configfile, config_ctx *ctx)
         // No continuation hand off value if necessary
         if(name && value)
         {
-            rb_messagex(LOG_DEBUG, "parsed configuration value: [%s] %s = %s", header, name, value);
+            rb_messagex(LOG_DEBUG, "config: %s: [%s] %s = %s",
+                        ctx->confname, header, name, value);
             config_value(header, name, value, ctx);
         }
 
@@ -452,7 +457,7 @@ parse_config_file(const char* configfile, config_ctx *ctx)
         {
             t = p + strcspn(p, "]");
             if(!*t || t == p + 1)
-                errx(2, "invalid config header: %s", p);
+                errx(2, "%s: invalid config header: %s", ctx->confname, p);
 
             *t = 0;
             header = trim_space(p + 1);
@@ -462,7 +467,7 @@ parse_config_file(const char* configfile, config_ctx *ctx)
         /* Look for the break between name = value on the same line */
         t = p + strcspn(p, ":=");
         if(!*t)
-            errx(2, "invalid config line: %s", p);
+            errx(2, "%s: invalid config line: %s", ctx->confname, p);
 
         /* Null terminate and split value part */
         *t = 0;
@@ -474,7 +479,8 @@ parse_config_file(const char* configfile, config_ctx *ctx)
 
     if(name && value)
     {
-        rb_messagex(LOG_DEBUG, "parsed configuration value: [%s] %s = %s", header, name, value);
+        rb_messagex(LOG_DEBUG, "config: %s: [%s] %s = %s",
+                    ctx->confname, header, name, value);
         config_value(header, name, value, ctx);
     }
 
