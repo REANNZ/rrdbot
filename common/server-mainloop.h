@@ -10,7 +10,6 @@
 #define SERVER_WRITE      0x02
 
 typedef void (*server_socket_callback)(int fd, int type, void* arg);
-/* TODO: We should declare our own time type: 'mstime' */
 typedef int (*server_timer_callback)(uint64_t when, void* arg);
 
 void    server_init();

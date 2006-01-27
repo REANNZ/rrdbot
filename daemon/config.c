@@ -45,8 +45,6 @@
 #include "stringx.h"
 #include "rrdbotd.h"
 
-/* TODO: Put file names in all the parsing error messages */
-
 /*
  * These routines parse the configuration files and setup the in memory
  * data structures. They're mostly run before becoming a daemon, and just

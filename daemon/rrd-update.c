@@ -110,8 +110,6 @@ void rb_rrd_update(rb_poller *poll)
     optind = 0;
     opterr = 0;
 
-    /* TODO: We need support for @ to specify when these values occurred */
-
     argv[0] = "rrdupdate";
     argv[1] = poll->rrdname;
     argv[2] = "-t";

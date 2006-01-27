@@ -42,7 +42,6 @@
 #include <stdarg.h>
 #include <syslog.h>
 
-/* TODO: Abstract these headers away nicely */
 #include <bsnmp/asn1.h>
 #include <bsnmp/snmp.h>
 
