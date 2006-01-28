@@ -300,7 +300,7 @@ timeout_req(rb_request* req, mstime when)
         {
             rb_messagex(LOG_DEBUG, "value for field '%s' timed out", it->rrdfield);
 
-            it->value = RB_UNKNOWN;
+            it->vtype = VALUE_UNSET;
             it->req = NULL;
         }
 
@@ -353,18 +353,21 @@ respond_req(rb_request* req, struct snmp_pdu* pdu, mstime when)
                 switch(value->syntax)
                 {
                 case SNMP_SYNTAX_NULL:
-                    item->value = RB_UNKNOWN;
+                    item->vtype = VALUE_UNSET;
                     break;
                 case SNMP_SYNTAX_INTEGER:
-                    item->value = value->v.integer;
+                    item->v.i_value = value->v.integer;
+                    item->vtype = VALUE_REAL;
                     break;
                 case SNMP_SYNTAX_COUNTER:
                 case SNMP_SYNTAX_GAUGE:
                 case SNMP_SYNTAX_TIMETICKS:
-                    item->value = value->v.uint32;
+                    item->v.i_value = value->v.uint32;
+                    item->vtype = VALUE_REAL;
                     break;
                 case SNMP_SYNTAX_COUNTER64:
-                    item->value = value->v.counter64;
+                    item->v.i_value = value->v.counter64;
+                    item->vtype = VALUE_REAL;
                     break;
                 case SNMP_SYNTAX_OCTETSTRING:
                 case SNMP_SYNTAX_OID:
@@ -383,9 +386,15 @@ respond_req(rb_request* req, struct snmp_pdu* pdu, mstime when)
 
                 if(msg)
                     rb_messagex(LOG_WARNING, msg, item->rrdfield);
+                else if(item->vtype == VALUE_REAL)
+                    rb_messagex(LOG_DEBUG, "got value for field '%s': %lld",
+                                item->rrdfield, item->v.i_value);
+                else if(item->vtype == VALUE_FLOAT)
+                    rb_messagex(LOG_DEBUG, "got value for field '%s': %lld",
+                                item->rrdfield, item->v.f_value);
                 else
-                    rb_messagex(LOG_DEBUG, "got value for field '%s': %0.2f",
-                                item->rrdfield, item->value);
+                    rb_messagex(LOG_DEBUG, "got value for field '%s': U",
+                                item->rrdfield);
 
                 /* Mark this value as done */
                 item->req = NULL;
@@ -491,7 +500,7 @@ poller_timer(mstime when, void* arg)
 
         /* Mark item as active by this request */
         it->req = req;
-        it->value = RB_UNKNOWN;
+        it->vtype = VALUE_UNSET;
     }
 
     if(req)

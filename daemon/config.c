@@ -295,7 +295,7 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
     ritem->host = rhost;
     ritem->poller = NULL; /* Set later in config_done */
     ritem->req = NULL;
-    ritem->value = RB_UNKNOWN;
+    ritem->vtype = VALUE_UNSET;
 
     /* And parse the OID */
     if(rb_snmp_parse_mib(path, &(ritem->snmpfield)) == -1)

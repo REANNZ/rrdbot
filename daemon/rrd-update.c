@@ -97,11 +97,14 @@ void rb_rrd_update(rb_poller *poll)
 
         strlcat(template, it->rrdfield, tlen);
 
-        if(it->value == RB_UNKNOWN)
+        if(it->vtype == VALUE_UNSET)
             strlcat(items, "U", ilen);
         else
         {
-            snprintf(buf, MAX_NUMLEN, "%.4lf", it->value);
+            if(it->vtype == VALUE_FLOAT)
+                snprintf(buf, MAX_NUMLEN, "%.4lf", it->v.f_value);
+            else
+                snprintf(buf, MAX_NUMLEN, "%lld", it->v.i_value);
             buf[MAX_NUMLEN - 1] = 0;
             strlcat(items, buf, ilen);
         }

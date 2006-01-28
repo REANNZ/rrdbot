@@ -39,7 +39,6 @@
 #ifndef __RRDBOTD_H__
 #define __RRDBOTD_H__
 
-#include <values.h>
 #include <stdint.h>
 #include <stdarg.h>
 
@@ -53,7 +52,6 @@
  */
 
 typedef uint64_t mstime;
-#define RB_UNKNOWN -DBL_MAX
 
 struct _rb_item;
 struct _rb_poller;
@@ -67,14 +65,23 @@ struct _rb_request;
 
 typedef struct _rb_item
 {
-    struct _rb_request* req;
-
     /* Specific to this item */
     const char* rrdfield;
     struct snmp_value snmpfield;
 
     /* The last value / current request */
-    double value;
+    union
+    {
+        int64_t i_value;
+        double f_value;
+    } v;
+
+    #define VALUE_UNSET 0
+    #define VALUE_REAL  1
+    #define VALUE_FLOAT 2
+    int vtype;
+
+    struct _rb_request* req;
 
     /* Pointers to related */
     const struct _rb_poller* poller;
