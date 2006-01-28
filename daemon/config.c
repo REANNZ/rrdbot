@@ -316,7 +316,7 @@ static void
 config_value(const char* header, const char* name, char* value,
              config_ctx* ctx)
 {
-    if(strcmp(header, "poll") != 0)
+    if(strcmp(header, CONFIG_POLL) != 0)
         return;
 
     if(strcmp(name, CONFIG_INTERVAL) == 0)
@@ -335,7 +335,7 @@ config_value(const char* header, const char* name, char* value,
         ctx->interval = (uint32_t)i;
     }
 
-    if(strcmp(name, CONFIG_TIMEOUT) == 0)
+    else if(strcmp(name, CONFIG_TIMEOUT) == 0)
     {
         char* t;
         int i;
@@ -352,7 +352,7 @@ config_value(const char* header, const char* name, char* value,
     }
 
     /* If it starts with "field." */
-    if(strncmp(name, CONFIG_FIELD, KL(CONFIG_FIELD)) == 0)
+    else if(strncmp(name, CONFIG_FIELD, KL(CONFIG_FIELD)) == 0)
     {
         rb_poller* poll;
         const char* field;
@@ -362,8 +362,8 @@ config_value(const char* header, const char* name, char* value,
         field = name + KL(CONFIG_FIELD);
         t = field + strspn(field, FIELD_VALID);
         if(*t)
-            err(2, "%s: the '%s' field name must only contain characters, digits, underscore and dash",
-                ctx->confname, field);
+            errx(2, "%s: the '%s' field name must only contain characters, digits, underscore and dash",
+                 ctx->confname, field);
 
         /* Parse out the field */
         parse_item(field, value, ctx);
