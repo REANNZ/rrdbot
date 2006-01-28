@@ -169,10 +169,16 @@ rb_vmessage(int level, int err, const char* msg, va_list ap)
     }
 
     ASSERT (msg);
-    snprintf(buf, MAX_MSGLEN, "%s%s", msg, err ? ": " : "");
+
+    /* Cleanup the message a little */
+    strlcpy(buf, msg, MAX_MSGLEN);
+    trim_end(buf);
 
     if(err)
+    {
+        strlcat(buf, ": ", MAX_MSGLEN);
         strncat(buf, strerror(e), MAX_MSGLEN);
+    }
 
     /* As a precaution */
     buf[MAX_MSGLEN - 1] = 0;
