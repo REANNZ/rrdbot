@@ -42,11 +42,13 @@
 #include <stdarg.h>
 #include <syslog.h>
 #include <signal.h>
+#include <err.h>
 
 #include <bsnmp/asn1.h>
 #include <bsnmp/snmp.h>
 
 #include "rrdbotd.h"
+#include "server-mainloop.h"
 
 /* The default command line options */
 #define DEFAULT_CONFIG      CONF_PREFIX "/rrdbot"
@@ -72,11 +74,12 @@ static int debug_level = LOG_ERR;
 
 #include "mib/parse.h"
 
+#ifdef TEST
+
 static void
 test(int argc, char* argv[])
 {
     struct snmp_value val;
-    mib_node n, n2;
 
     debug_level = 4;
 
@@ -97,6 +100,8 @@ test(int argc, char* argv[])
     rb_mib_uninit();
     exit(1);
 }
+
+#endif /* TEST */
 
 /* -----------------------------------------------------------------------------
  * LOGGING
@@ -211,7 +216,10 @@ main(int argc, char* argv[])
     char ch;
     char* t;
 
-    /* test(argc, argv); */
+#ifdef TEST
+    test(argc, argv);
+    return 1;
+#endif
 
     /* Initialize the state stuff */
     memset(&g_state, 0, sizeof(g_state));
@@ -310,7 +318,7 @@ main(int argc, char* argv[])
     {
         /* Fork a daemon nicely */
         if(daemon(0, 0) == -1)
-            err("couldn't fork as a daemon");
+            err(1, "couldn't fork as a daemon");
 
         rb_messagex(LOG_DEBUG, "running as a daemon");
         daemonized = 1;

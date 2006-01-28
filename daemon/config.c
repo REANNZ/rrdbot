@@ -42,8 +42,10 @@
 #include <syslog.h>
 #include <dirent.h>
 #include <string.h>
+#include <err.h>
 
 #include "rrdbotd.h"
+#include "config-parser.h"
 
 /*
  * These routines parse the configuration files and setup the in memory
@@ -279,7 +281,7 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
         {
             rb_message(LOG_WARNING, "couldn't resolve host address (ignoring): %s", host);
             free(rhost);
-            return;
+            return NULL;
         }
 
         /* And add it to the list */
@@ -305,6 +307,8 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
     /* And add it to the list */
     ritem->next = ctx->items;
     ctx->items = ritem;
+
+    return ritem;
 }
 
 static void
@@ -349,7 +353,6 @@ config_value(const char* header, const char* name, char* value,
     /* If it starts with "field." */
     else if(strncmp(name, CONFIG_FIELD, KL(CONFIG_FIELD)) == 0)
     {
-        rb_poller* poll;
         const char* field;
         const char* t;
 

@@ -41,7 +41,7 @@
 /* Callbacks must be defined by the caller */
 extern int cfg_value(const char* filename, const char* header, const char* name,
                      char* value, void* data);
-extern int cfg_errcallback(const char* filename, const char* errmsg, void* data);
+extern int cfg_error(const char* filename, const char* errmsg, void* data);
 
 /* Calling these will call the callbacks above */
 int cfg_parse_dir(const char* dirname, void* data);

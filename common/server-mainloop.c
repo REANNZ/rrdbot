@@ -97,18 +97,14 @@ timeval_compare(struct timeval* t1, struct timeval* t2)
 #define timeval_to_ms(tv) \
     ((((uint64_t)(tv).tv_sec) * 1000L) + (((uint64_t)(tv).tv_usec) / 1000L))
 
-static int
-timeval_dump(struct timeval* tv)
-{
-    fprintf(stderr, "{ %d:%d }", tv->tv_sec, tv->tv_usec / 1000);
-}
+#define timeval_dump(tv) \
+    (fprintf(stderr, "{ %d:%d }", (uint)((tv)->tv_sec), (uint)((tv)->tv_usec / 1000))
 
 static int
 add_timer(int ms, int oneshot, server_timer_callback callback, void* arg)
 {
     struct timeval interval;
     timer_callback* cb;
-    int i;
 
     ASSERT(ms > 0);
     ASSERT(callback != NULL);
@@ -150,10 +146,9 @@ remove_timer(timer_callback* timcb)
 {
     timer_callback* cb;
     timer_callback* next;
-    int i;
 
     if(!ctx.timers)
-        return;
+        return NULL;
 
     /* First in list */;
     if(ctx.timers == timcb)
@@ -175,6 +170,9 @@ remove_timer(timer_callback* timcb)
             return cb->next;
         }
     }
+
+    /* Couldn't remove, return self */
+    return timcb;
 }
 
 void
@@ -232,7 +230,7 @@ server_run()
     timer_callback* timcb;
     socket_callback* sockcb;
     fd_set rfds, wfds;
-    int r, i;
+    int r;
 
     /* No watches have been set */
     ASSERT(ctx.max_fd > -1);
@@ -346,7 +344,6 @@ int
 server_watch(int fd, int type, server_socket_callback callback, void* arg)
 {
     socket_callback* cb;
-    int i;
     ASSERT(type != 0);
     ASSERT(fd != -1);
     ASSERT(callback != NULL);
@@ -380,7 +377,6 @@ void
 server_unwatch(int fd)
 {
     socket_callback* cb;
-    int i;
 
     ASSERT(fd != -1);
 

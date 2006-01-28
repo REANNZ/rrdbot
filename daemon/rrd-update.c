@@ -43,6 +43,8 @@
 #include <syslog.h>
 #include <unistd.h>
 
+#include <rrd.h>
+
 #include "rrdbotd.h"
 
 #define MAX_NUMLEN 40
@@ -120,7 +122,7 @@ void rb_rrd_update(rb_poller *poll)
     rb_messagex(LOG_DEBUG, "> values: %s", items);
 
     rrd_clear_error();
-    r = rrd_update(5, argv);
+    r = rrd_update(5, (char**)argv);
 
     if(r != 0)
         rb_messagex(LOG_ERR, "couldn't update rrd file: %s: %s",

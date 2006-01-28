@@ -38,7 +38,9 @@
 
 #include "usuals.h"
 #include <errno.h>
+#include <unistd.h>
 #include <syslog.h>
+#include <err.h>
 
 #include <bsnmp/asn1.h>
 #include <bsnmp/snmp.h>
@@ -121,7 +123,7 @@ new_req()
 {
     rb_request* req = NULL;
     uint num;
-    int i, first, overlap = 0;
+    int i, overlap = 0;
 
     if(nrequests)
     {
@@ -335,7 +337,6 @@ respond_req(rb_request* req, struct snmp_pdu* pdu, mstime when)
     struct snmp_value* value;
     rb_poller* poll = req->poll;
     rb_item* item;
-    int incomplete = 0;
     int i;
 
     ASSERT(req->id == pdu->request_id);

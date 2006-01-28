@@ -42,6 +42,7 @@
 #include <syslog.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <err.h>
 #include <strings.h>
 
 #include "usuals.h"
@@ -238,7 +239,7 @@ xcalloc(size_t size)
 {
     register void* value = calloc(1, size);
     if(value == NULL)
-        errx("out of memory");
+        errx(1, "out of memory");
     return value;
 }
 

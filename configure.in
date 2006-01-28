@@ -8,6 +8,8 @@ CFLAGS="$CFLAGS -I/usr/local/include"
 AC_CONFIG_SRCDIR([daemon/rrdbotd.c])
 AM_CONFIG_HEADER([config.h])
 
+CFLAGS="$CFLAGS -Wall"
+
 # Debug mode
 AC_ARG_ENABLE(debug, 
         AC_HELP_STRING([--enable-debug],

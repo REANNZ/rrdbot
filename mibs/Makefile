@@ -65,7 +65,7 @@ AUTOMAKE = ${SHELL} /data/projects/rrdbot/missing --run automake-1.9
 AWK = mawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS =  -I/usr/local/include -g -O0
+CFLAGS =  -I/usr/local/include -Wall -g -O0
 CPP = gcc -E
 CPPFLAGS =
 CYGPATH_W = echo

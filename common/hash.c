@@ -53,6 +53,7 @@
 
 #include <sys/types.h>
 #include <stdlib.h>
+#include <string.h>
 #include "hash.h"
 
 #define KEY_DATA(he)    ((he)->key)

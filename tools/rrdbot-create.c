@@ -40,6 +40,11 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <err.h>
+
+#include <rrd.h>
+
+#include "config-parser.h"
 
 /* -----------------------------------------------------------------------------
  * CONSTANTS
@@ -143,7 +148,7 @@ create_file(create_ctx* ctx, const char* rrd)
         opterr = 0;
 
         rrd_clear_error();
-        r = rrd_create(argc, argv);
+        r = rrd_create(argc, (char**)argv);
 
         if(r != 0)
             warnx("couldn't create rrd file: %s: %s", rrd, rrd_get_error());
@@ -276,7 +281,7 @@ cfg_value(const char* filename, const char* header, const char* name,
 
     /* Only process this section */
     if(strcmp(header, CONFIG_CREATE) != 0)
-        return;
+        return 0;
 
     /* The rra option */
     if(strcmp(name, CONFIG_RRA) == 0)
@@ -296,7 +301,7 @@ cfg_value(const char* filename, const char* header, const char* name,
             warnx("%s: the '%s' field name must only contain characters, digits, underscore and dash",
                   ctx->confname, field);
             ctx->skip = 1;
-            return;
+            return 0;
         }
 
         add_field(ctx, field, value);
@@ -345,7 +350,6 @@ main(int argc, char* argv[])
     const char* confdir = DEFAULT_CONFIG;
     create_ctx ctx;
     char ch;
-    char* t;
 
     memset(&ctx, 0, sizeof(ctx));
     ctx.workdir = DEFAULT_WORK;

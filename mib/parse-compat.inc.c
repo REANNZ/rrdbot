@@ -56,7 +56,7 @@ static int initialized = 0;
 #define TRUE 1
 
 /* No need to implement these */
-#define DEBUGMSGTL
+#define DEBUGMSGTL(x)
 #define set_function(tp)
 
 /* Just return the tree head */
@@ -102,7 +102,7 @@ netsnmp_ds_get_int(int dummy, int var)
 #define netsnmp_ds_set_boolean(a, b, c)
 #define netsnmp_ds_toggle_boolean(a, b)
 
-static int
+static void
 snmp_log(int level, const char* msg, ...)
 {
     va_list ap;
@@ -116,7 +116,7 @@ snmp_log(int level, const char* msg, ...)
 }
 
 /* Only used to open files */
-static int
+static void
 snmp_log_perror(const char* file)
 {
     rb_message(LOG_ERR, "couldn't open file: %s", file);

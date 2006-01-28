@@ -121,7 +121,6 @@ cfg_parse_file(const char* filename, void* data, char** memory)
     int ret = -1;
     char* p;
     char* t;
-    int pos;
 
     ASSERT(filename);
 
