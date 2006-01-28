@@ -51,8 +51,8 @@
 /* The socket to use */
 static int snmp_socket = -1;
 
-/* The last request: start at a strange number */
-static uint32_t snmp_request = 0x0A0A0A0A;
+/* The last request id */
+static uint32_t snmp_request = 100000;
 
 /* Since we only deal with one packet at a time, global buffer */
 static unsigned char snmp_buffer[0x1000];
@@ -272,7 +272,7 @@ send_req(rb_request* req, mstime when)
         if(ret == -1)
             rb_message(LOG_ERR, "couldn't send snmp packet to: %s", req->host->name);
         else
-            rb_messagex(LOG_DEBUG, "sent request '%d' to: %s", req->id, req->host->name);
+            rb_messagex(LOG_DEBUG, "sent request #%d to: %s", req->id, req->host->name);
     }
 
     /* And update our bookkeeping */
@@ -394,10 +394,10 @@ respond_req(rb_request* req, struct snmp_pdu* pdu, mstime when)
                 if(msg)
                     rb_messagex(LOG_WARNING, msg, item->rrdfield);
                 else if(item->vtype == VALUE_REAL)
-                    rb_messagex(LOG_DEBUG, "got value for field '%s': %.4lf",
+                    rb_messagex(LOG_DEBUG, "got value for field '%s': %lld",
                                 item->rrdfield, item->v.i_value);
                 else if(item->vtype == VALUE_FLOAT)
-                    rb_messagex(LOG_DEBUG, "got value for field '%s': %lld",
+                    rb_messagex(LOG_DEBUG, "got value for field '%s': %.4lf",
                                 item->rrdfield, item->v.f_value);
                 else
                     rb_messagex(LOG_DEBUG, "got value for field '%s': U",
@@ -478,7 +478,7 @@ poller_timer(mstime when, void* arg)
             req->poll = poll;
             req->host = it->host;
 
-            /* rb_messagex(LOG_DEBUG, "preparing request '%d' for: %s@%s",
+            /* rb_messagex(LOG_DEBUG, "preparing request #%d for: %s@%s",
                         req->id, req->host->community, req->host->name); */
 
             /* Setup the packet */
@@ -590,7 +590,7 @@ receive_resp(int fd, int type, void* arg)
         rb_message(LOG_WARNING, "wrong version snmp packet from: %s", hostname);
 
     /* Dispatch the packet */
-    rb_messagex(LOG_DEBUG, "response to request '%d' from: %s", req->id, hostname);
+    rb_messagex(LOG_DEBUG, "response to request #%d from: %s", req->id, hostname);
     respond_req(req, &pdu, server_get_time());
 }
 
