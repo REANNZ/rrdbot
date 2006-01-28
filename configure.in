@@ -35,7 +35,12 @@ AC_C_INLINE
 dnl Check for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADERS([rrd.h], , [echo "ERROR: rrd headers not found"])
-dnl TODO: AC_CHECK_HEADERS
+AC_CHECK_HEADERS([unistd.h stdio.h stddef.h stdlib.h assert.h errno.h stdarg.h string.h netdb.h], ,
+    [echo "ERROR: Required C header missing"; exit 1])
+
+AC_CHECK_FUNCS([strlcat strlcpy strtob])
+AC_CHECK_FUNCS([strerror getopt getaddrinfo], , 
+           [echo "ERROR: Required function missing"; exit 1])
 
 AC_MSG_RESULT()
 

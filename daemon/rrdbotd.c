@@ -46,7 +46,6 @@
 #include <bsnmp/asn1.h>
 #include <bsnmp/snmp.h>
 
-#include "stringx.h"
 #include "rrdbotd.h"
 
 /* The default command line options */
@@ -172,7 +171,7 @@ rb_vmessage(int level, int err, const char* msg, va_list ap)
 
     /* Cleanup the message a little */
     strlcpy(buf, msg, MAX_MSGLEN);
-    trim_end(buf);
+    stretrim(buf);
 
     if(err)
     {

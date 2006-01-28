@@ -43,7 +43,6 @@
 #include <syslog.h>
 #include <unistd.h>
 
-#include "stringx.h"
 #include "rrdbotd.h"
 
 #define MAX_NUMLEN 40

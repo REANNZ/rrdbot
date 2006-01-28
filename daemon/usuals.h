@@ -50,6 +50,8 @@
 #include <errno.h>
 #include <string.h>
 
+#include "compat.h"
+
 #ifndef NULL
 #define NULL 0
 #endif

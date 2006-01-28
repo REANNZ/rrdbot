@@ -50,19 +50,19 @@ size_t strlcat(char* dst, const char* src, size_t siz);
 #endif
 
 #ifndef HAVE_STRCLN
-void strcln(char* data);
+void strcln(char* data, char ch);
 #endif
 
 #ifndef HAVE_STRBTRIM
-char* trim_start(const char* data);
+char* strbtrim(const char* data);
 #endif
 
 #ifndef HAVE_STRETRIM
-void trim_end(char* data);
+void stretrim(char* data);
 #endif
 
 #ifndef HAVE_STRTRIM
-char* trim_space(char* data);
+char* strtrim(char* data);
 #endif
 
 #ifndef HAVE_STRTOB

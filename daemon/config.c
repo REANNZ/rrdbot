@@ -42,7 +42,6 @@
 #include <syslog.h>
 #include <dirent.h>
 
-#include "stringx.h"
 #include "rrdbotd.h"
 
 /*
@@ -410,7 +409,7 @@ read_config_file(const char* configfile)
     config[len + 1] = 0;
 
     /* Remove nasty dos line endings */
-    remove_cr(config);
+    strcln(config, '\r');
 
     rb_messagex(LOG_DEBUG, "read config file: %s", configfile);
     return config;
@@ -439,7 +438,7 @@ parse_config_file(const char* configfile, config_ctx *ctx)
         p = next; /* Do this before cleaning below */
         next = t + 1;
 
-        t = trim_start(p);
+        t = strbtrim(p);
 
         /* Continuation line (had spaces at start) */
         if(p < t && *t)
@@ -482,7 +481,7 @@ parse_config_file(const char* configfile, config_ctx *ctx)
                 errx(2, "%s: invalid config header: %s", ctx->confname, p);
 
             *t = 0;
-            header = trim_space(p + 1);
+            header = strtrim(p + 1);
             continue;
         }
 
@@ -495,8 +494,8 @@ parse_config_file(const char* configfile, config_ctx *ctx)
         *t = 0;
         t++;
 
-        name = trim_space(p);
-        value = trim_space(t);
+        name = strtrim(p);
+        value = strtrim(t);
     }
 
     if(name && value)

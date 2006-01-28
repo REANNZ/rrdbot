@@ -5,7 +5,7 @@ rrdbotd_SOURCES = rrdbotd.c rrdbotd.h config.c usuals.h \
                 snmp-help.c snmp-engine.c rrd-update.c \
                 ../common/server-mainloop.c ../common/server-mainloop.h \
                 ../common/sock-any.h ../common/sock-any.c \
-                ../common/stringx.h ../common/stringx.c \
+                ../common/compat.h ../common/compat.c \
                 ../common/hash.h ../common/hash.c \
                 ../mib/parse.c
 rrdbotd_CFLAGS = -I${top_srcdir}/common/ -I${top_srcdir}/bsnmp/ -I${top_srcdir} \

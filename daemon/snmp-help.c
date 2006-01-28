@@ -43,7 +43,6 @@
 #include <bsnmp/asn1.h>
 #include <bsnmp/snmp.h>
 
-#include "stringx.h"
 #include "rrdbotd.h"
 
 /* Whether we print warnings when loading MIBs or not */

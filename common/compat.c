@@ -98,8 +98,8 @@ stretrim(char* data)
 char*
 strtrim(char* data)
 {
-    data = (char*)trim_start(data);
-    trim_end(data);
+    data = (char*)strbtrim(data);
+    stretrim(data);
     return data;
 }
 
