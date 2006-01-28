@@ -166,7 +166,7 @@ usage()
 {
     fprintf(stderr, "usage: rrdbotd [-M] [-c confdir] [-w workdir] [-m mibdir] \n");
     fprintf(stderr, "               [-d level] [-p pidfile] [-r retries] [-t timeout]\n");
-    fprintf(stderr, "       rrdbotd -v\n");
+    fprintf(stderr, "       rrdbotd -V\n");
     exit(2);
 }
 
@@ -222,7 +222,7 @@ main(int argc, char* argv[])
     g_state.timeout = DEFAULT_TIMEOUT;
 
     /* Parse the arguments nicely */
-    while((ch = getopt(argc, argv, "c:d:Mp:r:t:w:v")) != -1)
+    while((ch = getopt(argc, argv, "c:d:Mp:r:t:w:V")) != -1)
     {
         switch(ch)
         {
@@ -276,7 +276,7 @@ main(int argc, char* argv[])
             break;
 
         /* Print version number */
-        case 'v':
+        case 'V':
             version();
             break;
 
