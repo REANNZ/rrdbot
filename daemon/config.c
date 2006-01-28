@@ -186,6 +186,7 @@ config_done(config_ctx* ctx)
     /* Clear current config and get ready for next */
     ctx->items = NULL;
     ctx->interval = 0;
+    ctx->timeout = 0;
 }
 
 static void
