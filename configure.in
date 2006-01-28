@@ -39,7 +39,8 @@ dnl TODO: AC_CHECK_HEADERS
 
 AC_MSG_RESULT()
 
-AC_CONFIG_FILES([Makefile 
+AC_CONFIG_FILES([Makefile
+    mibs/Makefile
     daemon/Makefile
     bsnmp/Makefile])
 AC_OUTPUT
