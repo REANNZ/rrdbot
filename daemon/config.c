@@ -41,6 +41,7 @@
 #include <unistd.h>
 #include <syslog.h>
 #include <dirent.h>
+#include <string.h>
 
 #include "rrdbotd.h"
 
@@ -53,7 +54,6 @@
 typedef struct _config_ctx
 {
     const char* confname;
-    char* configmem;
     uint interval;
     uint timeout;
     rb_item* items;
@@ -181,14 +181,10 @@ config_done(config_ctx* ctx)
      * This allows all the users of these strings not to worry
      * about reallocating or freeing them
      */
-    rb_atexit(free, ctx->configmem);
-    ctx->configmem = NULL;
 
     /* Clear current config and get ready for next */
     ctx->items = NULL;
     ctx->interval = 0;
-
-
 }
 
 static void
@@ -374,180 +370,66 @@ config_value(const char* header, const char* name, char* value,
     }
 }
 
-/* -----------------------------------------------------------------------------
- * CONFIG FILES
- */
-
-static char*
-read_config_file(const char* configfile)
-{
-    char* config = NULL;
-    FILE* f = NULL;
-    long len;
-
-    ASSERT(configfile);
-
-    f = fopen(configfile, "r");
-    if(f == NULL)
-        err(1, "couldn't open config file: %s", configfile);
-
-    /* Figure out size */
-    if(fseek(f, 0, SEEK_END) == -1 || (len = ftell(f)) == -1 || fseek(f, 0, SEEK_SET) == -1)
-        err(1, "couldn't seek config file: %s", configfile);
-
-    if((config = (char*)malloc(len + 2)) == NULL)
-        errx(1, "out of memory");
-
-    /* And read in one block */
-    if(fread(config, 1, len, f) != len)
-        err(1, "couldn't read config file: %s", configfile);
-
-    fclose(f);
-
-    /* Null terminate the data */
-    config[len] = '\n';
-    config[len + 1] = 0;
-
-    /* Remove nasty dos line endings */
-    strcln(config, '\r');
-
-    rb_messagex(LOG_DEBUG, "read config file: %s", configfile);
-    return config;
-}
-
-static void
-parse_config_file(const char* configfile, config_ctx *ctx)
-{
-    char* name = NULL;
-    char* value = NULL;
-    char* config;
-    char* next;
-    char* header;
-    char* p;
-    char* t;
-    int pos;
-
-    config = read_config_file(configfile);
-    ctx->configmem = config;
-    next = config;
-
-    /* Go through lines and process them */
-    while((t = strchr(next, '\n')) != NULL)
-    {
-        *t = 0;
-        p = next; /* Do this before cleaning below */
-        next = t + 1;
-
-        t = strbtrim(p);
-
-        /* Continuation line (had spaces at start) */
-        if(p < t && *t)
-        {
-            if(!value)
-                errx(2, "%s: invalid continuation in config: %s",
-                     ctx->confname, p);
-
-            /* Calculate the end of the current value */
-            t = value + strlen(value);
-            ASSERT(t < p);
-
-            /* Continuations are separated by spaces */
-            *t = ' ';
-            t++;
-
-            continue;
-        }
-
-        // No continuation hand off value if necessary
-        if(name && value)
-        {
-            rb_messagex(LOG_DEBUG, "config: %s: [%s] %s = %s",
-                        ctx->confname, header, name, value);
-            config_value(header, name, value, ctx);
-        }
-
-        name = NULL;
-        value = NULL;
-
-        /* Empty lines / comments at start / comments without continuation */
-        if(!*t || *p == '#')
-            continue;
-
-        /* A header */
-        if(*p == '[')
-        {
-            t = p + strcspn(p, "]");
-            if(!*t || t == p + 1)
-                errx(2, "%s: invalid config header: %s", ctx->confname, p);
-
-            *t = 0;
-            header = strtrim(p + 1);
-            continue;
-        }
-
-        /* Look for the break between name = value on the same line */
-        t = p + strcspn(p, ":=");
-        if(!*t)
-            errx(2, "%s: invalid config line: %s", ctx->confname, p);
-
-        /* Null terminate and split value part */
-        *t = 0;
-        t++;
-
-        name = strtrim(p);
-        value = strtrim(t);
-    }
-
-    if(name && value)
-    {
-        rb_messagex(LOG_DEBUG, "config: %s: [%s] %s = %s",
-                    ctx->confname, header, name, value);
-        config_value(header, name, value, ctx);
-    }
-
-    config_done(ctx);
-
-    /* If nobody claimed this memory then we don't need to keep it around */
-    if(ctx->configmem)
-        free(ctx->configmem);
-    ctx->configmem = NULL;
-}
-
 void
 rb_config_parse()
 {
-    char configfile[MAXPATHLEN];
-    struct dirent* dire;
     config_ctx ctx;
-    DIR* dir;
 
     /* Setup the hash tables properly */
     g_state.poll_by_key = hsh_create();
     g_state.host_by_name = hsh_create();
 
-    dir = opendir(g_state.confdir);
-    if(!dir)
-        err(1, "couldn't list config directory: %s", g_state.confdir);
+    memset(&ctx, 0, sizeof(ctx));
 
-    while((dire = readdir(dir)) != NULL)
-    {
-        if(dire->d_type != DT_REG && dire->d_type != DT_LNK)
-            continue;
-
-        /* Build a happy path name */
-        snprintf(configfile, MAXPATHLEN, "%s/%s", g_state.confdir, dire->d_name);
-        configfile[MAXPATHLEN - 1] = 0;
-
-        memset(&ctx, 0, sizeof(ctx));
-        ctx.confname = dire->d_name;
-
-        parse_config_file(configfile, &ctx);
-    }
+    if(cfg_parse_dir(g_state.confdir, &ctx) == -1)
+        exit(2); /* message already printed */
 
     if(!g_state.polls)
         errx(1, "no config files found in config directory: %s", g_state.confdir);
+}
 
-    closedir(dir);
+/* -----------------------------------------------------------------------------
+ * CONFIG CALLBACKS
+ */
+
+int
+cfg_value(const char* filename, const char* header, const char* name,
+          char* value, void* data)
+{
+    config_ctx* ctx = (config_ctx*)data;
+
+    ASSERT(filename);
+    ASSERT(ctx);
+
+    /* A little setup where necessary */
+    if(!ctx->confname)
+        ctx->confname = filename;
+
+    /* Called like this after each file */
+    if(!header)
+    {
+        config_done(ctx);
+        ctx->confname = NULL;
+        return 0;
+    }
+
+    ASSERT(ctx->confname);
+    ASSERT(name && value && header);
+
+    rb_messagex(LOG_DEBUG, "config: %s: [%s] %s = %s",
+                ctx->confname, header, name, value);
+
+    config_value(header, name, value, ctx);
+
+    return 0;
+}
+
+int
+cfg_error(const char* filename, const char* errmsg, void* data)
+{
+    /* Just exit on errors */
+    errx(2, "%s", errmsg);
+    return 0;
 }
 
 /* -----------------------------------------------------------------------------

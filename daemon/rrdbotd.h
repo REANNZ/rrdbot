@@ -152,9 +152,6 @@ void rb_messagex(int level, const char* msg, ...);
 void rb_message(int level, const char* msg, ...);
 void rb_vmessage(int level, int err, const char* msg, va_list ap);
 
-typedef void (*voidfunc)(void*);
-void rb_atexit (voidfunc func, void* data);
-
 /* -----------------------------------------------------------------------------
  * CONFIG (config.c)
  */

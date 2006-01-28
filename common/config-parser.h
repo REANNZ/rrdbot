@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004, Nate Nielsen
+ * Copyright (c) 2005, Nate Nielsen
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,44 +33,18 @@
  *
  * CONTRIBUTORS
  *  Nate Nielsen <nielsen@memberwebs.com>
- *
  */
 
-#ifndef __COMPAT_H__
-#define __COMPAT_H__
+#ifndef __CONFIG_PARSER_H__
+#define __CONFIG_PARSER_H__
 
-#include "config.h"
+/* Callbacks must be defined by the caller */
+extern int cfg_value(const char* filename, const char* header, const char* name,
+                     char* value, void* data);
+extern int cfg_errcallback(const char* filename, const char* errmsg, void* data);
 
-#ifndef HAVE_STRLCPY
-size_t strlcpy(char *dst, const char *src, size_t len);
-#endif
+/* Calling these will call the callbacks above */
+int cfg_parse_dir(const char* dirname, void* data);
+int cfg_parse_file(const char* filename, void* data, char** memory);
 
-#ifndef HAVE_STRLCAT
-size_t strlcat(char* dst, const char* src, size_t siz);
-#endif
-
-#ifndef HAVE_STRCLN
-void strcln(char* data, char ch);
-#endif
-
-#ifndef HAVE_STRBTRIM
-char* strbtrim(const char* data);
-#endif
-
-#ifndef HAVE_STRETRIM
-void stretrim(char* data);
-#endif
-
-#ifndef HAVE_STRTRIM
-char* strtrim(char* data);
-#endif
-
-#ifndef HAVE_STRTOB
-int strtob(const char* str);
-#endif
-
-#ifndef HAVE_ATEXITV
-void atexitv(void (*func)(void*), void* data);
-#endif
-
-#endif /* __COMPAT_H__ */
+#endif /* __CONFIG_PARSER_H__ */

@@ -99,56 +99,6 @@ test(int argc, char* argv[])
 }
 
 /* -----------------------------------------------------------------------------
- * CLEANUP
- */
-
-typedef struct _exit_stack
-{
-    voidfunc func;
-    void* data;
-
-    /* We have a list of these beauties */
-    struct _exit_stack* next;
-}
-exit_stack;
-
-/* Our exit stack */
-static exit_stack* atexits = NULL;
-static int atexit_registered = 0;
-
-static void
-atexit_do_stack(void)
-{
-    exit_stack* next;
-    for(; atexits; atexits = next)
-    {
-        next = atexits->next;
-        (atexits->func)(atexits->data);
-        free(atexits);
-    }
-}
-
-void
-rb_atexit(voidfunc func, void* data)
-{
-    exit_stack* ae;
-
-    ASSERT(func);
-
-    ae = (exit_stack*)calloc(1, sizeof(exit_stack));
-    if(ae)
-    {
-        ae->func = func;
-        ae->data = data;
-        ae->next = atexits;
-        atexits = ae;
-
-        if(!atexit_registered)
-            atexit(atexit_do_stack);
-    }
-}
-
-/* -----------------------------------------------------------------------------
  * LOGGING
  */
 
