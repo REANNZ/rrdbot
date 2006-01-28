@@ -1,6 +1,6 @@
 
 EXTRA_DIST = common mib
-SUBDIRS = bsnmp daemon mibs
+SUBDIRS = bsnmp daemon tools mibs
 
 # Clean up any EXTRA_DIST we're distributing
 dist-hook:

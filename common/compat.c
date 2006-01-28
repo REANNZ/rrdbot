@@ -230,3 +230,16 @@ atexitv(voidfunc func, void* data)
 }
 
 #endif /* HAVE_ATEXITV */
+
+#ifndef HAVE_XCALLOC
+
+void*
+xcalloc(size_t size)
+{
+    register void* value = calloc(1, size);
+    if(value == NULL)
+        errx("out of memory");
+    return value;
+}
+
+#endif /* HAVE_XCALLOC */
