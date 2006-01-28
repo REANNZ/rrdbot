@@ -98,7 +98,7 @@ timeval_compare(struct timeval* t1, struct timeval* t2)
     ((((uint64_t)(tv).tv_sec) * 1000L) + (((uint64_t)(tv).tv_usec) / 1000L))
 
 #define timeval_dump(tv) \
-    (fprintf(stderr, "{ %d:%d }", (uint)((tv)->tv_sec), (uint)((tv)->tv_usec / 1000))
+    (fprintf(stderr, "{ %d:%d }", (uint)((tv).tv_sec), (uint)((tv).tv_usec / 1000)))
 
 static int
 add_timer(int ms, int oneshot, server_timer_callback callback, void* arg)
@@ -278,7 +278,7 @@ server_run()
             }
 
             /* Get soonest timer */
-            if (!timeout || timeval_compare(timeout, &timcb->at) < 0)
+            if (!timeout || timeval_compare(&timcb->at, timeout) < 0)
                 timeout = &timcb->at;
 
             timcb = timcb->next;

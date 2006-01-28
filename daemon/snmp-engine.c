@@ -278,6 +278,8 @@ send_req(rb_request* req, mstime when)
     req->sent++;
     if(req->sent <= g_state.retries)
         req->next_retry = when + req->interval;
+    else
+        req->next_retry = 0;
 }
 
 static void
@@ -387,7 +389,7 @@ respond_req(rb_request* req, struct snmp_pdu* pdu, mstime when)
                 if(msg)
                     rb_messagex(LOG_WARNING, msg, item->rrdfield);
                 else if(item->vtype == VALUE_REAL)
-                    rb_messagex(LOG_DEBUG, "got value for field '%s': %lld",
+                    rb_messagex(LOG_DEBUG, "got value for field '%s': %.4lf",
                                 item->rrdfield, item->v.i_value);
                 else if(item->vtype == VALUE_FLOAT)
                     rb_messagex(LOG_DEBUG, "got value for field '%s': %lld",
@@ -590,11 +592,11 @@ receive_resp(int fd, int type, void* arg)
 static int
 resend_timer(mstime when, void* arg)
 {
-    int i;
+    int i, first;
 
-    /* Search forwards through the scrolling window */
-    for(i = (reqlow + 1) % nrequests; i != reqhigh;
-        i = (i + 1) % nrequests)
+    /* Search backwards through the scrolling window */
+    for(i = reqhigh, first = 1; first || i != reqlow;
+        i = (i ? i : nrequests) - 1, first = 0)
     {
         if(requests[i].id)
             check_req(&(requests[i]), when);
