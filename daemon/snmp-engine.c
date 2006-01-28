@@ -99,6 +99,7 @@ typedef struct _rb_request
     uint32_t id;
 
     mstime next_retry;        /* Time of the next retry */
+    mstime last_sent;         /* Time last sent */
     mstime interval;          /* How long between retries */
     mstime timeout;           /* When this request times out */
     uint sent;                /* How many times we've sent */
@@ -280,6 +281,7 @@ send_req(rb_request* req, mstime when)
         req->next_retry = when + req->interval;
     else
         req->next_retry = 0;
+    req->last_sent = when;
 }
 
 static void
@@ -309,6 +311,9 @@ timeout_req(rb_request* req, mstime when)
         else if(it->req)
             incomplete = 1;
     }
+
+    /* For timeouts we use the time the last request was sent */
+    when = req->last_sent;
 
     free_req(req);
 
