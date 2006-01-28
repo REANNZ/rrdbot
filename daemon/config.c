@@ -146,9 +146,8 @@ config_done(config_ctx* ctx)
     poll = (rb_poller*)hsh_get(g_state.poll_by_key, key, -1);
     if(!poll)
     {
-        poll = (rb_poller*)calloc(1, sizeof(*poll));
-
-        if(!poll || !hsh_set(g_state.poll_by_key, key, -1, poll))
+        poll = (rb_poller*)xcalloc(sizeof(*poll));
+        if(!hsh_set(g_state.poll_by_key, key, -1, poll))
             errx(1, "out of memory");
 
         strcpy(poll->key, key);
@@ -264,9 +263,8 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
     if(!rhost)
     {
         /* Make a new one if necessary */
-        rhost = (rb_host*)calloc(1, sizeof(*rhost));
-
-        if(!rhost || !hsh_set(g_state.host_by_name, host, -1, rhost))
+        rhost = (rb_host*)xcalloc(sizeof(*rhost));
+        if(!hsh_set(g_state.host_by_name, host, -1, rhost))
             errx(1, "out of memory");
 
         /* TODO: Version support */
@@ -290,10 +288,7 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
     }
 
     /* Make a new item */
-    ritem = calloc(1, sizeof(*ritem));
-    if(!ritem)
-        errx(1, "out of memory");
-
+    ritem = (rb_item*)xcalloc(sizeof(*ritem));
     ritem->rrdfield = field;
     ritem->host = rhost;
     ritem->poller = NULL; /* Set later in config_done */
