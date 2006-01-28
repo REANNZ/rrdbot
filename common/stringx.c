@@ -45,15 +45,17 @@
 #include <strings.h>
 
 #include "usuals.h"
-#include "stringx.h"
+#include "compat.h"
+
+#ifndef HAVE_STRCLN
 
 void
-remove_cr(char* data)
+strcln(char* data, char ch)
 {
     char* p;
     for(p = data; *data; data++, p++)
     {
-        while(*data == '\r')
+        while(*data == ch)
             data++;
         *p = *data;
     }
@@ -62,16 +64,24 @@ remove_cr(char* data)
     *p = 0;
 }
 
+#endif /* HAVE_STRCLN */
+
+#ifndef HAVE_STRBTRIM
+
 char*
-trim_start(const char* data)
+strbtrim(const char* data)
 {
     while(*data && isspace(*data))
         ++data;
     return (char*)data;
 }
 
+#endif /* HAVE_STRBTRIM */
+
+#ifndef HAVE_STRETRIM
+
 void
-trim_end(char* data)
+stretrim(char* data)
 {
     char* t = data + strlen(data);
     while(t > data && isspace(*(t - 1)))
@@ -81,16 +91,24 @@ trim_end(char* data)
     }
 }
 
+#endif /* HAVE_STRETRIM */
+
+#ifndef HAVE_STRTRIM
+
 char*
-trim_space(char* data)
+strtrim(char* data)
 {
     data = (char*)trim_start(data);
     trim_end(data);
     return data;
 }
 
-/* String to bool helper function */
-int strtob(const char* str)
+#endif /* HAVE_STRTRIM */
+
+#ifndef HAVE_STRTOB
+
+int
+strtob(const char* str)
 {
     if(strcasecmp(str, "0") == 0 ||
        strcasecmp(str, "no") == 0 ||
@@ -109,6 +127,11 @@ int strtob(const char* str)
     return -1;
 }
 
+#endif /* HAVE_STRTOB */
+
+
+#ifndef HAVE_STRLCPY
+
 size_t
 strlcpy(char *dst, const char *src, size_t len)
 {
@@ -123,19 +146,22 @@ strlcpy(char *dst, const char *src, size_t len)
         return (ret);
 }
 
-size_t strlcat(char* dst, const char* src, size_t siz)
+#endif /* HAVE_STRLCPY */
+
+#ifndef HAVE_STRLCAT
+
+size_t
+strlcat(char* dst, const char* src, size_t siz)
 {
     char* d = dst;
     const char* s = src;
     size_t n = siz;
     size_t dlen;
 
-    /* Find the end of dst and adjust bytes left but don't go past end */
     while(n-- != 0 && *d != '\0')
-     	d++;
+        d++;
     dlen = d - dst;
     n = siz - dlen;
-
     if(n == 0)
         return dlen + strlen(s);
     while(*s != '\0')
@@ -148,8 +174,8 @@ size_t strlcat(char* dst, const char* src, size_t siz)
 
         s++;
     }
-
     *d = '\0';
-
     return dlen + (s - src);       /* count does not include NUL */
 }
+
+#endif /* HAVE_STRLCAT */
