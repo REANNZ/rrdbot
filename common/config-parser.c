@@ -231,7 +231,7 @@ cfg_parse_dir(const char* dirname, void* data)
     char *memory;
     DIR* dir;
 
-    ASSERT(dir != NULL);
+    ASSERT(dirname != NULL);
 
     if(!getcwd(olddir, MAXPATHLEN))
         olddir[0] = 0;
