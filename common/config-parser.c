@@ -125,6 +125,9 @@ cfg_parse_file(const char* filename, void* data, char** memory)
     ASSERT(filename);
 
     config = read_config_file(filename, data);
+    if(!config)
+        goto finally;
+
     next = config;
 
     /* Go through lines and process them */
