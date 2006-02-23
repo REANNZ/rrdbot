@@ -265,7 +265,7 @@ cfg_value(const char* filename, const char* header, const char* name,
         /* Do cleanup */
         ctx->confname = NULL;
 
-        for( ; ctx->args; ctx->args = ctx->args->next)
+        while(ctx->args)
         {
             arg = ctx->args->next;
             free(ctx->args->def);
