@@ -75,6 +75,7 @@ typedef struct _create_ctx
 {
     const char* workdir;
     const char* confname;
+    int create;
     int skip;
     create_arg* args;
 }
@@ -254,6 +255,10 @@ check_create_file(create_ctx* ctx)
 
     ASSERT(ctx->confname);
 
+    /* No create section, no create */
+    if(!ctx->create)
+        return;
+
     snprintf(rrd, sizeof(rrd), "%s/%s.rrd", ctx->workdir, ctx->confname);
     rrd[sizeof(rrd) - 1] = 0;
 
@@ -362,6 +367,7 @@ cfg_value(const char* filename, const char* header, const char* name,
         }
 
         ctx->skip = 0;
+        ctx->create = 0;
         return 0;
     }
 
@@ -370,6 +376,9 @@ cfg_value(const char* filename, const char* header, const char* name,
     /* Only process this section */
     if(strcmp(header, CONFIG_CREATE) != 0)
         return 0;
+
+    /* Have a [create] section */
+    ctx->create = 1;
 
     /* The rra option */
     if(strcmp(name, CONFIG_RRA) == 0)
