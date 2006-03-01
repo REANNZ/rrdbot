@@ -226,39 +226,58 @@ finally:
     return ret;
 }
 
-int
-cfg_parse_dir(const char* dirname, void* data)
+static int
+parse_dir_internal(const char* subdir, void* data)
 {
-    char olddir[MAXPATHLEN];
+    char path[MAXPATHLEN];
     struct dirent* dire;
-    char *memory;
+    char* memory;
     DIR* dir;
+    int r;
 
-    ASSERT(dirname != NULL);
-
-    if(!getcwd(olddir, MAXPATHLEN))
-        olddir[0] = 0;
-
-    if(chdir(dirname) == -1)
-        errmsg(NULL, data, "couldn't list config directory: %s", dirname);
-
-    dir = opendir(".");
+    /* Open specified or current directory */
+    dir = opendir(subdir ? subdir : ".");
     if(!dir)
     {
-        errmsg(NULL, data, "couldn't list config directory: %s", dirname);
+        errmsg(NULL, data, "couldn't list config directory: %s",
+               subdir ? subdir : ".");
         return -1;
     }
 
     while((dire = readdir(dir)) != NULL)
     {
+        /* Build a file path to this entry */
+        if(subdir)
+        {
+            strlcpy(path, subdir, MAXPATHLEN);
+            strlcat(path, "/", MAXPATHLEN);
+            strlcat(path, dire->d_name, MAXPATHLEN);
+        }
+        else
+            strlcpy(path, dire->d_name, MAXPATHLEN);
+
+        /* Descend into each sub directory */
+        if(dire->d_type == DT_DIR)
+        {
+            /* No hidden or dot directories */
+            if(dire->d_name[0] == '.')
+                continue;
+
+            r = parse_dir_internal(path, data);
+            if(r < 0)
+                return r;
+
+            continue;
+        }
+
         if(dire->d_type != DT_REG && dire->d_type != DT_LNK)
             continue;
 
         /* Build a happy path name */
-        cfg_parse_file(dire->d_name, data, &memory);
+        cfg_parse_file(path, data, &memory);
 
         /* We call it with blanks after files */
-        if(cfg_value(dire->d_name, NULL, NULL, NULL, data) == -1)
+        if(cfg_value(path, NULL, NULL, NULL, data) == -1)
             break;
 
         /* Keep the memory around */
@@ -269,4 +288,29 @@ cfg_parse_dir(const char* dirname, void* data)
     closedir(dir);
 
     return 0;
+}
+
+int
+cfg_parse_dir(const char* dirname, void* data)
+{
+    char olddir[MAXPATHLEN];
+    int ret;
+
+    ASSERT(dirname != NULL);
+
+    if(!getcwd(olddir, MAXPATHLEN))
+        olddir[0] = 0;
+
+    if(chdir(dirname) == -1)
+    {
+        errmsg(NULL, data, "couldn't list config directory: %s", dirname);
+        return -1;
+    }
+
+    ret = parse_dir_internal(NULL, data);
+
+    if(olddir[0])
+        chdir(olddir);
+
+    return ret;
 }

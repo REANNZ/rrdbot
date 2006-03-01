@@ -41,7 +41,7 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <err.h>
-
+#include <sys/stat.h>
 #include <rrd.h>
 
 #include "config-parser.h"
@@ -105,13 +105,101 @@ verb(const char* fmt, ...)
  * CREATE
  */
 
-void
+static int
+mkdir_p(char* path)
+{
+    struct stat sb;
+    int first, last, retval = 0;
+    char* p = path;
+
+    /* Skip leading '/'. */
+    while(p[0] == '/')
+        ++p;
+
+    for(first = 1, last = 0; !last ; ++p)
+    {
+        if(p[0] == '\0')
+            last = 1;
+        else if (p[0] != '/')
+            continue;
+        *p = '\0';
+        if(!last && p[1] == '\0')
+            last = 1;
+
+        /* Modified by the umask */
+        if(mkdir(path, S_IRWXU | S_IRWXG | S_IRWXO) < 0)
+        {
+            if(errno == EEXIST || errno == EISDIR)
+            {
+                if(stat(path, &sb) < 0)
+                {
+                    retval = 1;
+                    break;
+                }
+                else if(!S_ISDIR(sb.st_mode))
+                {
+                    if (last)
+                        errno = EEXIST;
+                    else
+                        errno = ENOTDIR;
+                    retval = 1;
+                    break;
+                }
+            }
+            else
+            {
+                retval = 1;
+                break;
+            }
+        }
+        if (!last)
+            *p = '/';
+    }
+
+    return (retval);
+}
+
+static int
+create_dir_for_file(const char* path)
+{
+    char *p = strrchr(path, '/');
+    char *dir;
+    int r;
+
+    /* No subdirectories, not needed */
+    if (!p)
+        return 0;
+
+    dir = calloc((p - path) + 1, 1);
+    if(!dir)
+    {
+        errno = ENOMEM;
+        return -1;
+    }
+
+    memcpy (dir, path, (p - path));
+    r = mkdir_p(dir);
+    free(dir);
+
+    if(r < 0)
+    {
+        warnx("couldn't create directory for rrd file: %s", dir);
+        return r;
+    }
+
+    return r;
+}
+
+static void
 create_file(create_ctx* ctx, const char* rrd)
 {
     create_arg* arg;
     int num = 0;
     int argc, r;
     const char** argv;
+
+    if(create_dir_for_file(rrd))
+        return;
 
     for(arg = ctx->args; arg; arg = arg->next)
         num++;
@@ -263,7 +351,7 @@ cfg_value(const char* filename, const char* header, const char* name,
         check_create_file(ctx);
 
         /* Do cleanup */
-        ctx->confname = NULL;
+        ctx->confname = 0;
 
         while(ctx->args)
         {
