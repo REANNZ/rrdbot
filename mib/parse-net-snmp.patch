@@ -1,5 +1,5 @@
 --- parse.c.orig	2006-01-27 14:11:27.000000000
-+++ parse.c	2006-01-27 15:20:14.000000000 
++++ parse.c	2006-04-04 16:04:46.000000000
 @@ -1,4 +1,11 @@
  /*
 + * Nate Nielsen
@@ -12,7 +12,7 @@
   * parse.c
   *
   * Update: 1998-09-22 <mslifcak@iss.net>
-@@ -47,75 +54,29 @@
+@@ -47,75 +54,22 @@
   * Use is subject to license terms specified in the COPYING file
   * distributed with the Net-SNMP package.
   */
@@ -33,7 +33,7 @@
 -#else
 -#include <strings.h>
 -#endif
--#include <ctype.h>
+ #include <ctype.h>
 -#include <sys/types.h>
 -#include <sys/stat.h>
 +#include <dirent.h>
@@ -41,12 +41,7 @@
  
 -/*
 - * Wow.  This is ugly.  -- Wes 
-+#include "parse.h"
-+
-+/* 
-+ * A file with compatibility definitions for making the following 
-+ * code work without the net-snmp library and all that.
-  */
+- */
 -#if HAVE_DIRENT_H
 -# include <dirent.h>
 -# define NAMLEN(dirent) strlen((dirent)->d_name)
@@ -89,10 +84,7 @@
 -#if HAVE_DMALLOC_H
 -#include <dmalloc.h>
 -#endif
-+#include "parse-compat.inc.c"
-+
-+/* -------------------------------------------------------------------------- */
-+
++#include "parse.h"
  
 -#include <net-snmp/types.h>
 -#include <net-snmp/output_api.h>
@@ -102,10 +94,11 @@
 -#include <net-snmp/library/parse.h>
 -#include <net-snmp/library/mib.h>
 -#include <net-snmp/library/snmp_api.h>
++/* -------------------------------------------------------------------------- */
  
  /*
   * This is one element of an object identifier with either an integer
-@@ -138,8 +99,8 @@
+@@ -138,8 +92,8 @@
      struct range_list *ranges;
  } tclist[MAXTC];
  
@@ -116,7 +109,7 @@
  static int      anonymous = 0;
  
  struct objgroup {
-@@ -4569,51 +4530,8 @@
+@@ -4569,51 +4523,8 @@
      char            token[MAXTOKEN], token2[MAXTOKEN];
      char            tmpstr[300];
      int             count = 0;
@@ -168,8 +161,8 @@
  
      if ((dir = opendir(dirname))) {
          snprintf(tmpstr, sizeof(tmpstr), "%s/.index", dirname);
---- parse.h.orig	2003-05-08 11:32:04.000000000 
-+++ parse.h	2006-01-27 12:56:14.000000000 
+--- parse.h.orig	2003-05-08 11:32:04.000000000
++++ parse.h	2006-01-27 12:56:14.000000000
 @@ -119,11 +119,6 @@
          struct varbind_list *varbinds;
          char           *hint;

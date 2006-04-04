@@ -33,21 +33,31 @@
  *
  * CONTRIBUTORS
  *  Nate Nielsen <nielsen@memberwebs.com>
+ *
  */
 
-#ifndef __CONFIG_PARSER_H__
-#define __CONFIG_PARSER_H__
+#ifndef __MIB_PARSER_H__
+#define __MIB_PARSER_H__
 
-/* Callbacks must be defined by the caller */
-extern int cfg_value(const char* filename, const char* header, const char* name,
-                     char* value, void* data);
-extern int cfg_error(const char* filename, const char* errmsg, void* data);
+#include "config.h"
+#include <bsnmp/asn1.h>
+#include <bsnmp/snmp.h>
 
-/* Calling these will call the callbacks above */
-int cfg_parse_dir(const char* dirname, void* data);
-int cfg_parse_file(const char* filename, void* data, char** memory);
+#define DEFAULT_MIB         DATA_PREFIX "/mib"
 
-/* A helper for parsing URIs */
-const char* cfg_parse_uri (char *uri, char** scheme, char** host, char** user, char** path);
+/* Whether we print warnings when loading MIBs or not */
+extern const char* mib_directory;
+extern int mib_warnings;
 
-#endif /* __CONFIG_PARSER_H__ */
+typedef void* mib_node;
+
+void mib_init();
+mib_node mib_lookup(const char* match);
+int mib_subid(mib_node n, const char* name);
+void mib_oid(mib_node n, struct asn_oid* oid);
+mib_node mib_get_node(struct asn_oid* oid);
+void mib_uninit();
+
+int mib_parse(const char* oid, struct snmp_value* value);
+
+#endif /* __MIB_PARSER_H__ */

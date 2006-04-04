@@ -58,37 +58,6 @@ static uint32_t snmp_request = 100000;
 static unsigned char snmp_buffer[0x1000];
 
 /* -----------------------------------------------------------------------------
- * CONSTANTS
- */
-
-/* All SNMP error messages */
-static struct
-{
-    int code;
-    const char* msg;
-} snmp_errmsgs[] = {
-    { SNMP_ERR_NOERROR, "Success" },
-    { SNMP_ERR_TOOBIG, "SNMP packet or response too big" },
-    { SNMP_ERR_NOSUCHNAME, "Unknown variable name" },
-    { SNMP_ERR_BADVALUE, "Incorrect syntax or value when modifing a variable" },
-    { SNMP_ERR_READONLY, "Value is readonly" },
-    { SNMP_ERR_GENERR, "Unspecified general error" },
-    { SNMP_ERR_NO_ACCESS, "Access was denied to the object" },
-    { SNMP_ERR_WRONG_TYPE, "The object type is incorrect for the object" },
-    { SNMP_ERR_WRONG_LENGTH, "Incorrect specified for the object." },
-    { SNMP_ERR_WRONG_ENCODING, "Incorrect encoding specified for the object." },
-    { SNMP_ERR_WRONG_VALUE, "Not possible to set this value for the object." },
-    { SNMP_ERR_NO_CREATION, "The value cannot be created." },
-    { SNMP_ERR_INCONS_VALUE, "Not possible to set the value at this time." },
-    { SNMP_ERR_RES_UNAVAIL, "The resource is not availeble" },
-    { SNMP_ERR_COMMIT_FAILED, "Commit failed" },
-    { SNMP_ERR_UNDO_FAILED, "Undo failed" },
-    { SNMP_ERR_AUTH_ERR, "A problem occured during authentication" },
-    { SNMP_ERR_NOT_WRITEABLE, "The variable cannot be written or created." },
-    { SNMP_ERR_INCONS_NAME, "The variable does not exist." }
-};
-
-/* -----------------------------------------------------------------------------
  * REQUESTS
  */
 
@@ -526,7 +495,7 @@ receive_resp(int fd, int type, void* arg)
     struct asn_buf b;
     rb_request* req;
     const char* msg;
-    int len, ret, i;
+    int len, ret;
     int32_t ip;
 
     ASSERT(snmp_socket == fd);
@@ -570,19 +539,13 @@ receive_resp(int fd, int type, void* arg)
     /* Check for errors */
     if(pdu.error_status != SNMP_ERR_NOERROR)
     {
-        msg = NULL;
-        for(i = 0; i < countof(snmp_errmsgs); i++)
-        {
-            if(pdu.error_status == snmp_errmsgs[i].code)
-            {
-                rb_message(LOG_ERR, "snmp error from host '%s': %s",
-                           hostname, snmp_errmsgs[i].msg);
-                return;
-            }
-        }
-
-        rb_message(LOG_ERR, "unknown snmp error from host '%s': %d",
-                   hostname, pdu.error_status);
+        msg = snmp_get_errmsg (pdu.error_status);
+        if(msg)
+            rb_message(LOG_ERR, "snmp error from host '%s': %s",
+                       hostname, msg);
+        else
+            rb_message(LOG_ERR, "unknown snmp error from host '%s': %d",
+                       hostname, pdu.error_status);
         return;
     }
 

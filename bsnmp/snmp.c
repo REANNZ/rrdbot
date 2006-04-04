@@ -1079,3 +1079,46 @@ snmp_printf_func(const char *fmt, ...)
 	vfprintf(stderr, fmt, ap);
 	va_end(ap);
 }
+
+/* -----------------------------------------------------------------------------
+ * ERR MESSAGE HANDLING
+ */
+
+/* All SNMP error messages */
+static struct
+{
+    int code;
+    const char* msg;
+} snmp_errmsgs[] = {
+    { SNMP_ERR_NOERROR, "Success" },
+    { SNMP_ERR_TOOBIG, "SNMP packet or response too big" },
+    { SNMP_ERR_NOSUCHNAME, "Unknown variable name" },
+    { SNMP_ERR_BADVALUE, "Incorrect syntax or value when modifing a variable" },
+    { SNMP_ERR_READONLY, "Value is readonly" },
+    { SNMP_ERR_GENERR, "Unspecified general error" },
+    { SNMP_ERR_NO_ACCESS, "Access was denied to the object" },
+    { SNMP_ERR_WRONG_TYPE, "The object type is incorrect for the object" },
+    { SNMP_ERR_WRONG_LENGTH, "Incorrect specified for the object." },
+    { SNMP_ERR_WRONG_ENCODING, "Incorrect encoding specified for the object." },
+    { SNMP_ERR_WRONG_VALUE, "Not possible to set this value for the object." },
+    { SNMP_ERR_NO_CREATION, "The value cannot be created." },
+    { SNMP_ERR_INCONS_VALUE, "Not possible to set the value at this time." },
+    { SNMP_ERR_RES_UNAVAIL, "The resource is not availeble" },
+    { SNMP_ERR_COMMIT_FAILED, "Commit failed" },
+    { SNMP_ERR_UNDO_FAILED, "Undo failed" },
+    { SNMP_ERR_AUTH_ERR, "A problem occured during authentication" },
+    { SNMP_ERR_NOT_WRITEABLE, "The variable cannot be written or created." },
+    { SNMP_ERR_INCONS_NAME, "The variable does not exist." }
+};
+
+const char*
+snmp_get_errmsg (int code)
+{
+    int i;
+    for(i = 0; i < sizeof(snmp_errmsgs) / sizeof(snmp_errmsgs[0]); i++)
+    {
+        if(code == snmp_errmsgs[i].code)
+            return snmp_errmsgs[i].msg;
+    }
+    return NULL;
+}

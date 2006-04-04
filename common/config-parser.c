@@ -314,3 +314,45 @@ cfg_parse_dir(const char* dirname, void* data)
 
     return ret;
 }
+
+const char*
+cfg_parse_uri (char *uri, char** scheme, char** host, char** user, char** path)
+{
+    char* t;
+
+    *scheme = NULL;
+    *host = NULL;
+    *user = NULL;
+    *path = NULL;
+
+    *scheme = strsep(&uri, ":");
+    if(uri == NULL || (uri[0] != '/' && uri[1] != '/'))
+        return "invalid uri";
+
+    uri += 2;
+    *host = strsep(&uri, "/");
+    if(*host[0])
+    {
+        /* Parse the community out from the host */
+        t = strchr(*host, '@');
+        if(t)
+        {
+            *t = 0;
+            *user = *host;
+            *host = t + 1;
+        }
+    }
+
+    if(!*host[0])
+        return "invalid uri: no host name found";
+
+    if(!uri || !uri[0] || !uri[1])
+        return "invalid uri: no path found";
+
+    *path = uri;
+
+    while((*path)[0] == '/')
+        (*path)++;
+
+    return NULL;
+}

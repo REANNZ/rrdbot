@@ -69,15 +69,7 @@ SOFTWARE.
 
 #include "parse.h"
 
-/*
- * A file with compatibility definitions for making the following
- * code work without the net-snmp library and all that.
- */
-#include "parse-compat.inc.c"
-
 /* -------------------------------------------------------------------------- */
-
-
 
 /*
  * This is one element of an object identifier with either an integer

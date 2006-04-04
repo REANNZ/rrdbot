@@ -46,6 +46,7 @@
 
 #include <bsnmp/asn1.h>
 #include <bsnmp/snmp.h>
+#include <mib/mib-parser.h>
 
 #include "rrdbotd.h"
 #include "server-mainloop.h"
@@ -53,7 +54,6 @@
 /* The default command line options */
 #define DEFAULT_CONFIG      CONF_PREFIX "/rrdbot"
 #define DEFAULT_WORK        "/var/db/rrdbot"
-#define DEFAULT_MIB         DATA_PREFIX "/mib"
 #define DEFAULT_RETRIES     3
 #define DEFAULT_TIMEOUT     5
 
@@ -63,10 +63,6 @@
 
 /* The one main state object */
 rb_state g_state;
-
-/* Whether we print warnings when loading MIBs or not */
-const char* g_mib_directory = DEFAULT_MIB;
-int g_mib_warnings = 0;
 
 /* Some logging flags */
 static int daemonized = 0;
@@ -251,12 +247,12 @@ main(int argc, char* argv[])
 
         /* mib directory */
         case 'm':
-            g_mib_directory = optarg;
+            mib_directory = optarg;
             break;
 
         /* MIB load warnings */
         case 'M':
-            g_mib_warnings = 1;
+            mib_warnings = 1;
             break;
 
         /* Write out a pid file */
@@ -309,7 +305,7 @@ main(int argc, char* argv[])
     rb_config_parse();
 
     /* As an optimization we unload the MIB processing data here */
-    rb_mib_uninit();
+    mib_uninit();
 
     /* Rev up the main engine */
     rb_snmp_engine_init();

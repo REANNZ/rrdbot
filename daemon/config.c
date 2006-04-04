@@ -44,6 +44,8 @@
 #include <string.h>
 #include <err.h>
 
+#include <mib/mib-parser.h>
+
 #include "rrdbotd.h"
 #include "config-parser.h"
 
@@ -189,68 +191,27 @@ config_done(config_ctx* ctx)
     ctx->timeout = 0;
 }
 
-static void
-parse_uri(char *uri, char** scheme, char** host,
-          char** user, char** path, config_ctx* ctx)
-{
-    /* Copy only for error messages as we mess with original */
-    char* copy = strdup(uri);
-    char* t;
-
-    *host = NULL;
-    *path = NULL;
-    *user = NULL;
-
-    *scheme = strsep(&uri, ":");
-    if(uri == NULL)
-        errx(2, "%s: invalid poll uri (scheme invalid): %s", ctx->confname, copy);
-
-    if((uri[0] != '/' && uri[1] != '/'))
-        errx(2, "%s: invalid poll uri (scheme invalid): %s", ctx->confname, copy);
-
-    uri += 2;
-    *host = strsep(&uri, "/");
-    if(*host[0])
-    {
-        /* Parse the user name out from the host */
-        t = strchr(*host, '@');
-        if(t)
-        {
-            *t = 0;
-            *user = *host;
-            *host = t + 1;
-        }
-    }
-
-    if(!*host[0])
-        errx(2, "%s: invalid poll uri (no hostname found): %s", ctx->confname, copy);
-
-    if(!uri || !uri[0] || !uri[1])
-        errx(2, "%s: invalid poll uri (no pathname found): %s", ctx->confname, copy);
-
-    *path = uri;
-
-    while((*path)[0] == '/')
-        (*path)++;
-
-    /* This copy only for error messages */
-    free(copy);
-}
-
 static rb_item*
 parse_item(const char* field, char* uri, config_ctx *ctx)
 {
     rb_item *ritem;
     rb_host *rhost;
 
+    const char *msg;
+    char* copy;
+    char* scheme;
     char* host;
     char* user;
-    char* scheme;
     char* path;
 
     /* Parse the SNMP URI */
-    parse_uri(uri, &scheme, &host, &user, &path, ctx);
-    ASSERT(scheme && host && path);
+    copy = strdup(uri);
+    msg = cfg_parse_uri(uri, &scheme, &host, &user, &path);
+    if(msg)
+        errx(2, "%s: %s: %s", ctx->confname, msg, copy);
+    free(copy);
+
+    ASSERT(host && path);
 
     /* TODO: SNMP version support */
 
@@ -299,7 +260,7 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
     ritem->vtype = VALUE_UNSET;
 
     /* And parse the OID */
-    if(rb_snmp_parse_mib(path, &(ritem->snmpfield)) == -1)
+    if(mib_parse(path, &(ritem->snmpfield)) == -1)
         errx(2, "%s: invalid MIB: %s", ctx->confname, path);
 
     rb_messagex(LOG_DEBUG, "parsed MIB into oid: %s -> %s", path,
