@@ -77,4 +77,12 @@ void atexitv(void (*func)(void*), void* data);
 void* xcalloc(size_t size);
 #endif
 
+#ifndef HAVE_STRLWR
+void strlwr(char* data);
+#endif
+
+#ifndef HAVE_STRUPR
+void strupr(char* data);
+#endif
+
 #endif /* __COMPAT_H__ */

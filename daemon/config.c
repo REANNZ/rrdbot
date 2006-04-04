@@ -69,7 +69,7 @@ config_ctx;
 #define CONFIG_POLL "poll"
 #define CONFIG_INTERVAL "interval"
 #define CONFIG_TIMEOUT "timeout"
-#define CONFIG_FIELD "field."
+#define CONFIG_SOURCE "source"
 #define CONFIG_SNMP "snmp"
 
 #define FIELD_VALID "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-0123456789."
@@ -316,6 +316,8 @@ static void
 config_value(const char* header, const char* name, char* value,
              config_ctx* ctx)
 {
+    char* suffix;
+
     if(strcmp(header, CONFIG_POLL) != 0)
         return;
 
@@ -333,9 +335,10 @@ config_value(const char* header, const char* name, char* value,
                 ctx->confname, value);
 
         ctx->interval = (uint32_t)i;
+        return;
     }
 
-    else if(strcmp(name, CONFIG_TIMEOUT) == 0)
+    if(strcmp(name, CONFIG_TIMEOUT) == 0)
     {
         char* t;
         int i;
@@ -349,23 +352,30 @@ config_value(const char* header, const char* name, char* value,
                 ctx->confname, value);
 
         ctx->timeout = (uint32_t)i;
+        return;
     }
 
+    /* Parse out suffix */
+    suffix = strchr(name, '.');
+    if(!suffix) /* Ignore unknown options */
+        return;
+
+    *suffix = 0;
+    suffix++;
+
     /* If it starts with "field." */
-    else if(strncmp(name, CONFIG_FIELD, KL(CONFIG_FIELD)) == 0)
+    if(strcmp(suffix, CONFIG_SOURCE) == 0)
     {
-        const char* field;
         const char* t;
 
         /* Check the name */
-        field = name + KL(CONFIG_FIELD);
-        t = field + strspn(field, FIELD_VALID);
+        t = name + strspn(name, FIELD_VALID);
         if(*t)
             errx(2, "%s: the '%s' field name must only contain characters, digits, underscore and dash",
-                 ctx->confname, field);
+                 ctx->confname, name);
 
         /* Parse out the field */
-        parse_item(field, value, ctx);
+        parse_item(name, value, ctx);
     }
 }
 

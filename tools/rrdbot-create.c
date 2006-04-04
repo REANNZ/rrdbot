@@ -55,8 +55,37 @@
 #define DEFAULT_WORK        "/var/db/rrdbot"
 
 #define CONFIG_CREATE   "create"
-#define CONFIG_RRA      "rra"
-#define CONFIG_FIELD    "field."
+#define CONFIG_POLL     "poll"
+#define CONFIG_INTERVAL "interval"
+#define CONFIG_ARCHIVE  "archive"
+#define CONFIG_TYPE     "type"
+#define CONFIG_MIN      "min"
+#define CONFIG_MAX      "max"
+#define CONFIG_CF       "cf"
+
+#define VAL_UNKNOWN     "U"
+#define VAL_ABSOLUTE    "ABSOLUTE"
+#define VAL_GAUGE       "GAUGE"
+#define VAL_COUNTER     "COUNTER"
+#define VAL_DERIVE      "DERIVE"
+#define VAL_COMPUTE     "COMPUTE"
+#define VAL_AVERAGE     "AVERAGE"
+#define VAL_MIN         "MIN"
+#define VAL_MAX         "MAX"
+#define VAL_LAST        "LAST"
+
+#define VAL_MINUTE      "minute"
+#define VAL_MINUTELY    "minutely"
+#define VAL_HOUR        "hour"
+#define VAL_HOURLY      "hourly"
+#define VAL_DAY         "day"
+#define VAL_DAILY       "daily"
+#define VAL_WEEK        "week"
+#define VAL_WEEKLY      "weekly"
+#define VAL_MONTH       "month"
+#define VAL_MONTHLY     "monthly"
+#define VAL_YEAR        "year"
+#define VAL_YEARLY      "yearly"
 
 #define FIELD_VALID     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-0123456789."
 
@@ -64,9 +93,30 @@
  * DECLARATIONS
  */
 
+typedef struct _field_arg
+{
+    const char *name;
+    const char *dst;
+    const char *min;
+    const char *max;
+
+    struct _field_arg* next;
+}
+field_arg;
+
+typedef struct _rra_arg
+{
+    uint num;
+    uint per;
+    uint many;
+
+    struct _rra_arg* next;
+}
+rra_arg;
+
 typedef struct _create_arg
 {
-    char* def;
+    char buf[256];
     struct _create_arg* next;
 }
 create_arg;
@@ -75,9 +125,13 @@ typedef struct _create_ctx
 {
     const char* workdir;
     const char* confname;
+    uint interval;
+    const char *cf;
     int create;
     int skip;
-    create_arg* args;
+
+    field_arg* fields;
+    rra_arg* rras;
 }
 create_ctx;
 
@@ -100,6 +154,57 @@ verb(const char* fmt, ...)
     va_start(va, fmt);
     vwarnx(fmt, va);
     va_end(va);
+}
+
+static field_arg*
+field_for(create_ctx* ctx, char* name)
+{
+    field_arg* field;
+
+    for(field = ctx->fields; field; field = field->next) {
+        if (strcmp(name, field->name) == 0)
+            return field;
+    }
+
+    field = (field_arg*)calloc(1, sizeof(field_arg));
+    if(!field)
+        errx(1, "out of memory");
+
+    field->name = name;
+    field->dst = VAL_ABSOLUTE;
+    field->min = VAL_UNKNOWN;
+    field->max = VAL_UNKNOWN;
+
+    field->next = ctx->fields;
+    ctx->fields = field;
+
+    return field;
+}
+
+static void
+context_reset(create_ctx* ctx)
+{
+    field_arg* field;
+    rra_arg* rra;
+
+    while(ctx->fields) {
+        field = ctx->fields->next;
+        free(ctx->fields);
+        ctx->fields = field;
+    }
+
+    while(ctx->rras) {
+        rra = ctx->rras->next;
+        free(ctx->rras);
+        ctx->rras = rra;
+    }
+
+    ctx->confname = NULL;
+    ctx->cf = VAL_AVERAGE;
+    ctx->interval = 0;
+
+    ctx->create = 0;
+    ctx->skip = 0;
 }
 
 /* -----------------------------------------------------------------------------
@@ -191,61 +296,136 @@ create_dir_for_file(const char* path)
     return r;
 }
 
-static void
+static int
 create_file(create_ctx* ctx, const char* rrd)
 {
+    create_arg* args = NULL;
     create_arg* arg;
-    int num = 0;
+    rra_arg* rra;
+    field_arg* field;
+    int nargs = 0;
+    uint rows, steps;
     int argc, r;
     const char** argv;
 
-    if(create_dir_for_file(rrd))
-        return;
-
-    for(arg = ctx->args; arg; arg = arg->next)
-        num++;
-
-    argv = (const char**)xcalloc(sizeof(char*) * (num + 5));
-
-    argv[0] = "create";
-    argv[1] = rrd;
-    argv[2] = "-b-1y";  /* Allow stuff up to a year old */
-    argv[3] = "-s10";   /* Up to 10 second resolution */
-    argc = 4;
-
-    if(!g_print)
-        verb("creating rrd with command:");
-
-    if(g_verbose || g_print)
-        fprintf(stderr, "# rrd create '%s' -b-1y -s10 ", rrd);
-
-    for(arg = ctx->args; arg; arg = arg->next)
+    if(!ctx->interval)
     {
-        argv[argc++] = arg->def;
+        warnx("%s: missing interval option", ctx->confname);
+        return -1;
+    }
+
+    if(!ctx->fields)
+    {
+        warnx("%s: no fields defined", ctx->confname);
+        return -1;
+    }
+
+
+    /* Build all the RRAs */
+    for(rra = ctx->rras; rra; rra = rra->next)
+    {
+        ASSERT(rra->per);
+        ASSERT(rra->num);
+        ASSERT(rra->many);
+
+        steps = (rra->per / rra->num) / ctx->interval;
+        if(!steps)
+        {
+            warnx("%s: archive has too many data points for polling interval. ignoring",
+                  ctx->confname);
+            continue;
+        }
+        rows = (rra->per * rra->many) / (ctx->interval * steps);
+
+        arg = (create_arg*)xcalloc(sizeof(create_arg));
+        snprintf(arg->buf, sizeof(arg->buf), "RRA:%s:0.6:%d:%d",
+                 ctx->cf, steps, rows);
+        arg->buf[sizeof(arg->buf) - 1] = 0;
+        arg->next = args;
+        args = arg;
+        nargs++;
+    }
+
+    if(!nargs)
+    {
+        warnx("%s: no archives defined", ctx->confname);
+        return -1;
+    }
+
+
+    /* Build all the fields */
+    for(field = ctx->fields; field; field = field->next)
+    {
+        ASSERT(field->name);
+        arg = (create_arg*)xcalloc(sizeof(create_arg));
+        snprintf(arg->buf, sizeof(arg->buf), "DS:%s:%s:%d:%s:%s",
+                 field->name, field->dst, ctx->interval * 3, field->min, field->max);
+        arg->buf[sizeof(arg->buf) - 1] = 0;
+        arg->next = args;
+        args = arg;
+        nargs++;
+    }
+
+    /* And the interval */
+    arg = (create_arg*)xcalloc(sizeof(create_arg));
+    snprintf(arg->buf, sizeof(arg->buf), "-s%d", ctx->interval);
+    arg->buf[sizeof(arg->buf) - 1] = 0;
+    arg->next = args;
+    args = arg;
+    nargs++;
+
+    argv = (const char**)xcalloc(sizeof(char*) * (nargs + 4));
+
+    if(create_dir_for_file(rrd) >= 0)
+    {
+        argv[0] = "create";
+        argv[1] = rrd;
+        argv[2] = "-b-1y";  /* Allow stuff up to a year old */
+        argc = 3;
+
+        if(!g_print)
+            verb("creating rrd with command:");
 
         if(g_verbose || g_print)
-            fprintf(stderr, "%s ", arg->def);
+            fprintf(stderr, "# rrd create '%s' -b-1y ", rrd);
+
+        for(arg = args; arg; arg = arg->next)
+        {
+            argv[argc++] = arg->buf;
+            if(g_verbose || g_print)
+                fprintf(stderr, "%s ", arg->buf);
+        }
+
+        if(g_verbose || g_print)
+            fprintf(stderr, "\n");
+
+        if(!g_print)
+        {
+            /* Always have to clear before calling rrdtool. klunky :( */
+            optind = 0;
+            opterr = 0;
+
+            rrd_clear_error();
+            r = rrd_create(argc, (char**)argv);
+
+            if(r != 0)
+                warnx("couldn't create rrd file: %s: %s", rrd, rrd_get_error());
+            else if(!g_print)
+                verb("created rrd: %s", rrd);
+        }
     }
 
-    if(g_verbose || g_print)
-        fprintf(stderr, "\n");
-
-    if(!g_print)
-    {
-        /* Always have to clear before calling rrdtool. klunky :( */
-        optind = 0;
-        opterr = 0;
-
-        rrd_clear_error();
-        r = rrd_create(argc, (char**)argv);
-
-        if(r != 0)
-            warnx("couldn't create rrd file: %s: %s", rrd, rrd_get_error());
-        else if(!g_print)
-            verb("created rrd: %s", rrd);
-    }
-
+    /* Some cleanup */
     free(argv);
+    while(args)
+    {
+        arg = args->next;
+        free(args);
+        args = arg;
+    }
+
+    /* We've handled all our own errors */
+    return 0;
 }
 
 void
@@ -274,61 +454,98 @@ check_create_file(create_ctx* ctx)
         return;
     }
 
-    if(ctx->skip)
-    {
+    if(ctx->skip || create_file(ctx, rrd) < 0)
         warnx("skipping rrd creation due to configuration errors: %s", rrd);
-        return;
-    }
-
-    create_file(ctx, rrd);
 }
 
-static void
+static int
 add_rras(create_ctx* ctx, char* value)
 {
-    const char rrafmt[] = "RRA:%s";
-    create_arg* arg;
-    char* def;
+    uint per;
+    uint num;
+    uint many;
+    rra_arg* rra;
     char* t;
-    int len;
+    char* p;
+    char* p2;
 
     while(value && *value)
     {
-        t = strchr(value, ' ');
+        per = num = 0;
+        many = 1;
+
+        /* Skip any delimiters, and parse next */
+        value = value + strspn(value, " \t,");
+        t = strchr(value, ',');
         if(t)
             *(t++) = 0;
 
-        len = strlen(rrafmt) + strlen(value) + 1;
-        def = (char*)xcalloc(len);
-        snprintf(def, len, rrafmt, strtrim(value));
-        def[len - 1] = 0;
+        /* Parse out the number */
+        p = strchr(value, '/');
+        if(!p)
+        {
+            warnx("%s: invalid 'archive' option: %s", ctx->confname, value);
+            return -1;
+        }
 
-        arg = (create_arg*)xcalloc(sizeof(create_arg));
-        arg->def = def;
-        arg->next = ctx->args;
-        ctx->args = arg;
+        *(p++) = 0;
+        num = strtoul(value, &p2, 10);
+        if(*p2 || !num)
+        {
+            warnx("%s: invalid 'archive' factor: %s", ctx->confname, value);
+            return -1;
+        }
 
+
+        /* Parse out the time frame */
+        p2 = strchr(p, '*');
+        if(p2)
+            *(p2)++ = 0;
+
+        strtrim(p);
+        strlwr(p);
+
+        if(strcmp(p, VAL_MINUTE) == 0 || strcmp(p, VAL_MINUTELY) == 0)
+            per = 60;
+        else if(strcmp(p, VAL_HOUR) == 0 || strcmp(p, VAL_HOURLY) == 0)
+            per = 3600;
+        else if(strcmp(p, VAL_DAY) == 0 || strcmp(p, VAL_DAILY) == 0)
+            per = 86400;
+        else if(strcmp(p, VAL_WEEK) == 0 || strcmp(p, VAL_WEEKLY) == 0)
+            per = 604800;
+        else if(strcmp(p, VAL_MONTH) == 0 || strcmp(p, VAL_MONTHLY) == 0)
+            per = 2592000;
+        else if(strcmp(p, VAL_YEAR) == 0 || strcmp(p, VAL_YEARLY) == 0)
+            per = 31536000;
+        else
+        {
+            warnx("%s: invalid 'archive' time unit: %s", ctx->confname, p);
+            return -1;
+        }
+
+
+        /* Parse out how many */
+        if(p2)
+        {
+            strtrim(p2);
+            many = strtoul(p2, &p, 10);
+            if(*p || many <= 0)
+            {
+                warnx("%s: invalid 'archive' count: %s", ctx->confname, p2);
+                return -1;
+            }
+        }
+
+        rra = (rra_arg*)xcalloc(sizeof(rra_arg));
+        rra->num = num;
+        rra->per = per;
+        rra->many = many;
+        rra->next = ctx->rras;
+        ctx->rras = rra;
         value = t;
     }
-}
 
-static void
-add_field(create_ctx* ctx, const char* field, char* value)
-{
-    const char dsfmt[] = "DS:%s:%s";
-    create_arg* arg;
-    char* def;
-    int len;
-
-    len = strlen(dsfmt) + strlen(field) + strlen(value) + 1;
-    def = (char*)xcalloc(len);
-    snprintf(def, len, dsfmt, field, value);
-    def[len - 1] = 0;
-
-    arg = (create_arg*)xcalloc(sizeof(create_arg));
-    arg->def = def;
-    arg->next = ctx->args;
-    ctx->args = arg;
+    return 0;
 }
 
 
@@ -341,7 +558,8 @@ cfg_value(const char* filename, const char* header, const char* name,
           char* value, void* data)
 {
     create_ctx* ctx = (create_ctx*)data;
-    create_arg* arg;
+    char* suffix;
+    char* t;
 
     ASSERT(filename);
     ASSERT(ctx);
@@ -356,54 +574,148 @@ cfg_value(const char* filename, const char* header, const char* name,
         check_create_file(ctx);
 
         /* Do cleanup */
-        ctx->confname = 0;
+        context_reset(ctx);
 
-        while(ctx->args)
-        {
-            arg = ctx->args->next;
-            free(ctx->args->def);
-            free(ctx->args);
-            ctx->args = arg;
-        }
-
-        ctx->skip = 0;
-        ctx->create = 0;
         return 0;
     }
 
     ASSERT(name && value);
 
-    /* Only process this section */
+    /* [poll] section */
+    if(strcmp(header, CONFIG_POLL) == 0)
+    {
+        /* Interval option */
+        if(strcmp(name, CONFIG_INTERVAL) == 0)
+        {
+            ctx->interval = strtoul(value, &t, 10);
+            if(*t || !ctx->interval)
+            {
+                warnx("%s: invalid 'interval' value: %s", ctx->confname, value);
+                ctx->skip = 1;
+            }
+        }
+
+        /* Ignore other options */
+        return 0;
+    }
+
+    /* The rest is in the [create] section */
     if(strcmp(header, CONFIG_CREATE) != 0)
         return 0;
 
     /* Have a [create] section */
     ctx->create = 1;
 
-    /* The rra option */
-    if(strcmp(name, CONFIG_RRA) == 0)
-        add_rras(ctx, value);
-
-    /* If it starts with "field." */
-    else if(strncmp(name, CONFIG_FIELD, KL(CONFIG_FIELD)) == 0)
+    /* The cf option */
+    if(strcmp(name, CONFIG_CF) == 0)
     {
-        const char* field;
-        const char* t;
-
-        /* Check the name */
-        field = name + KL(CONFIG_FIELD);
-        t = field + strspn(field, FIELD_VALID);
-        if(*t)
+        strupr(value);
+        if(strcmp(value, VAL_AVERAGE) == 0 ||
+           strcmp(value, VAL_MIN) == 0 ||
+           strcmp(value, VAL_MAX) == 0 ||
+           strcmp(value, VAL_LAST) == 0)
         {
-            warnx("%s: the '%s' field name must only contain characters, digits, underscore and dash",
-                  ctx->confname, field);
+            ctx->cf = value;
+        }
+        else
+        {
+            warnx("%s: invalid 'cf' value: %s", ctx->confname, value);
             ctx->skip = 1;
-            return 0;
         }
 
-        add_field(ctx, field, value);
+        ctx->create = 0;
+        return 0;
     }
 
+    /* The archive option */
+    if(strcmp(name, CONFIG_ARCHIVE) == 0)
+    {
+        if(add_rras(ctx, value) < 0)
+            ctx->skip = 1;
+        return 0;
+    }
+
+    /* Try and see if the field has a suffix */
+    suffix = strchr(name, '.');
+    if(!suffix) /* Ignore unknown options */
+        return 0;
+
+    /* Have a [create] section */
+    ctx->create = 1;
+
+    *suffix = 0;
+    suffix++;
+
+    /* Make sure the field name is good */
+    t = (char*)name + strspn(name, FIELD_VALID);
+    if(*t)
+    {
+        warnx("%s: the '%s' field name must only contain characters, digits, underscore and dash",
+              ctx->confname, name);
+        ctx->skip = 1;
+        return 0;
+    }
+
+    /* Field type suffix */
+    if(strcmp(suffix, CONFIG_TYPE) == 0)
+    {
+        strupr(value);
+        if(strcmp(value, VAL_ABSOLUTE) == 0 ||
+           strcmp(value, VAL_COUNTER) == 0 ||
+           strcmp(value, VAL_GAUGE) == 0 ||
+           strcmp(value, VAL_DERIVE) == 0 ||
+           strcmp(value, VAL_COMPUTE) == 0)
+        {
+            field_for(ctx, (char*)name)->dst = value;
+        }
+        else
+        {
+            warnx("%s: invalid field type: %s", ctx->confname, value);
+            ctx->skip = 1;
+        }
+
+        return 0;
+    }
+
+    /* Field minimum */
+    if(strcmp(suffix, CONFIG_MIN) == 0)
+    {
+        strupr(value);
+        if(strcmp(value, VAL_UNKNOWN) != 0)
+        {
+            strtod(value, &t);
+            if(*t)
+            {
+                warnx("%s: invalid field min: %s", ctx->confname, value);
+                ctx->skip = 1;
+                return 0;
+            }
+        }
+
+        field_for(ctx, (char*)name)->min = value;
+        return 0;
+    }
+
+    /* Field maximum */
+    if(strcmp(suffix, CONFIG_MAX) == 0)
+    {
+        strupr(value);
+        if(strcmp(value, VAL_UNKNOWN) != 0)
+        {
+            strtod(value, &t);
+            if(*t)
+            {
+                warnx("%s: invalid field max: %s", ctx->confname, value);
+                ctx->skip = 1;
+                return 0;
+            }
+        }
+
+        field_for(ctx, (char*)name)->max = value;
+        return 0;
+    }
+
+    /* Ignore unknown options */
     return 0;
 }
 
@@ -496,6 +808,7 @@ main(int argc, char* argv[])
     if(argc != 0)
         usage();
 
+    context_reset(&ctx);
 
     /*
      * We parse the configuration, this calls cfg_value

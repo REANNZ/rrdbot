@@ -232,6 +232,7 @@ atexitv(voidfunc func, void* data)
 
 #endif /* HAVE_ATEXITV */
 
+
 #ifndef HAVE_XCALLOC
 
 void*
@@ -244,3 +245,31 @@ xcalloc(size_t size)
 }
 
 #endif /* HAVE_XCALLOC */
+
+
+#ifndef HAVE_STRLWR
+
+void strlwr(char* data)
+{
+    while(*data)
+    {
+        *data = tolower(*data);
+        data++;
+    }
+}
+
+#endif /* HAVE_STRLWR */
+
+
+#ifndef HAVE_STRUPR
+
+void strupr(char* data)
+{
+    while(*data)
+    {
+        *data = toupper(*data);
+        data++;
+    }
+}
+
+#endif /* HAVE_STRUPR */
