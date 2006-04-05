@@ -141,6 +141,17 @@ snmp_log_perror(const char* file)
 #define SNMP_FREE(s)           do { if (s) { free((void *)s); s=NULL; } } while(0)
 
 /* -----------------------------------------------------------------------------
+ * PRIVATE DECLARATIONS
+ */
+
+typedef void* mib_node;
+
+mib_node mib_lookup(const char* match);
+int mib_subid(mib_node n, const char* name);
+void mib_oid(mib_node n, struct asn_oid* oid);
+mib_node mib_get_node(struct asn_oid* oid);
+
+/* -----------------------------------------------------------------------------
  * RRDBOT GLUE CODE
  */
 
@@ -343,13 +354,10 @@ parse_mixed_mib(const char* mib, struct asn_oid* oid)
 }
 
 int
-mib_parse(const char* mib, struct snmp_value* value)
+mib_parse(const char* mib, struct asn_oid* oid)
 {
     int ret;
     mib_node n;
-
-    value->syntax = SNMP_SYNTAX_NULL;
-    memset(&(value->v), 0, sizeof(value->v));
 
     /* An initial dot */
     if(*mib == '.')
@@ -362,7 +370,7 @@ mib_parse(const char* mib, struct snmp_value* value)
      * necessary
      */
 
-    ret = parse_mixed_mib(mib, &(value->var));
+    ret = parse_mixed_mib(mib, oid);
 
     /* Next try a symolic search */
     if(ret == -1)
@@ -373,9 +381,39 @@ mib_parse(const char* mib, struct snmp_value* value)
         if(n == NULL)
             return -1;
 
-        mib_oid(n, &(value->var));
+        mib_oid(n, oid);
         return 0;
     }
 
     return ret;
+}
+
+int
+mib_format(struct asn_oid* oid, FILE* f)
+{
+    extern struct tree *tree_head;
+    struct tree *tp = NULL;
+    asn_subid_t subid;
+    int i;
+
+    mib_init();
+
+    for(i = 0, tp = tree_head; tp && i < oid->len;
+        i++, tp = tp ? tp->child_list : NULL)
+    {
+        subid = oid->subs[i];
+
+        while(tp && tp->subid != subid)
+            tp = tp->next_peer;
+
+        if(!tp)
+            break;
+
+        fprintf(f, ".%s", tp->label);
+    }
+
+    for( ; i < oid->len; i++)
+        fprintf(f, ".%d", (int)(oid->subs[i]));
+
+    return 0;
 }

@@ -68,8 +68,8 @@ static char* snmp_hostname = NULL;
 
 static int retries = 0;
 
-/* Whether we're going recursive or not */
-static int recursive = 0;
+static int recursive = 0;   /* Whether we're going recursive or not */
+static int numeric = 0;     /* Print raw data */
 
 /* -----------------------------------------------------------------------------
  * DUMMY CONFIG FUNCTIONS
@@ -149,7 +149,8 @@ setup_req(char* uri)
 
     /* And parse the OID */
     snmp_data.bindings[0].syntax = 0;
-    if(mib_parse(path, &(snmp_data.bindings[0])) == -1)
+    memset(&(snmp_data.bindings[0].v), 0, sizeof(snmp_data.bindings[0].v));
+    if(mib_parse(path, &(snmp_data.bindings[0].var)) == -1)
         errx(2, "invalid MIB: %s", path);
 
     /* Add an item to this request */
@@ -186,7 +187,10 @@ print_resp(struct snmp_pdu* pdu, uint64_t when)
     {
         value = &(pdu->bindings[i]);
 
-        printf("%s: ", asn_oid2str(&(value->var)));
+        if(numeric)
+            printf("%s: ", asn_oid2str(&(value->var)));
+        else
+            mib_format(&(value->var), stdout);
 
         switch(value->syntax)
         {
@@ -334,7 +338,6 @@ int
 main(int argc, char* argv[])
 {
     struct sockaddr_in addr;
-    int numeric = 0;
     char ch;
 
     /* Parse the arguments nicely */

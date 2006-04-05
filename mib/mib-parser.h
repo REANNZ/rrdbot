@@ -49,15 +49,10 @@
 extern const char* mib_directory;
 extern int mib_warnings;
 
-typedef void* mib_node;
-
 void mib_init();
-mib_node mib_lookup(const char* match);
-int mib_subid(mib_node n, const char* name);
-void mib_oid(mib_node n, struct asn_oid* oid);
-mib_node mib_get_node(struct asn_oid* oid);
 void mib_uninit();
 
-int mib_parse(const char* oid, struct snmp_value* value);
+int mib_parse(const char* mib, struct asn_oid* oid);
+int mib_format(struct asn_oid* oid, FILE* f);
 
 #endif /* __MIB_PARSER_H__ */

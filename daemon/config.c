@@ -260,7 +260,9 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
     ritem->vtype = VALUE_UNSET;
 
     /* And parse the OID */
-    if(mib_parse(path, &(ritem->snmpfield)) == -1)
+    ritem->snmpfield.syntax = SNMP_SYNTAX_NULL;
+    memset(&(ritem->snmpfield.v), 0, sizeof(ritem->snmpfield.v));
+    if(mib_parse(path, &(ritem->snmpfield.var)) == -1)
         errx(2, "%s: invalid MIB: %s", ctx->confname, path);
 
     rb_messagex(LOG_DEBUG, "parsed MIB into oid: %s -> %s", path,
