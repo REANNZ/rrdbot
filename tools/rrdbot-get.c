@@ -50,26 +50,30 @@
 #include "server-mainloop.h"
 #include "config-parser.h"
 
-/* The socket to use */
-static int snmp_socket = -1;
 
-/* Since we only deal with one packet at a time, global buffer */
-static unsigned char snmp_buffer[0x1000];
+#define RESEND_TIMEOUT      200         /* Time between SNMP resends */
+#define DEFAULT_TIMEOUT     5000        /* Default timeout for SNMP response */
+#define MAX_RETRIES         3           /* Number of SNMP packets we retry */
 
-/* The actual request data */
-static struct snmp_pdu snmp_data;
+struct context
+{
+    int socket;                         /* The socket to use */
+    unsigned char packet[0x1000];       /* The raw packet data to send */
+    struct snmp_pdu pdu;                /* The actual request data */
+    struct asn_oid oid_first;           /* The first OID we've done */
 
-/* The first OID we've done */
-static struct asn_oid oid_first;
+    struct sockaddr_any hostaddr;       /* The remote host */
+    char* hostname;                     /* The remote host */
 
-/* The remote host */
-static struct sockaddr_any snmp_hostaddr;
-static char* snmp_hostname = NULL;
+    uint64_t lastsend;                  /* Time of last send */
+    int retries;                        /* Number of retries */
+    uint64_t timeout;                   /* Receive timeout */
 
-static int retries = 0;
+    int recursive;                      /* Whether we're going recursive or not */
+    int numeric;                        /* Print raw data */
+};
 
-static int recursive = 0;   /* Whether we're going recursive or not */
-static int numeric = 0;     /* Print raw data */
+static struct context ctx;
 
 /* -----------------------------------------------------------------------------
  * DUMMY CONFIG FUNCTIONS
@@ -98,17 +102,20 @@ send_req()
     struct asn_buf b;
     ssize_t ret;
 
-    b.asn_ptr = snmp_buffer;
-    b.asn_len = sizeof(snmp_buffer);
+    b.asn_ptr = ctx.packet;
+    b.asn_len = sizeof(ctx.packet);
 
-    if(snmp_pdu_encode(&snmp_data, &b))
+    if(snmp_pdu_encode(&ctx.pdu, &b))
         errx(1, "couldn't encode snmp buffer");
 
-    ret = sendto(snmp_socket, snmp_buffer, b.asn_ptr - snmp_buffer, 0,
-                 &SANY_ADDR(snmp_hostaddr), SANY_LEN(snmp_hostaddr));
+    ret = sendto(ctx.socket, ctx.packet, b.asn_ptr - ctx.packet, 0,
+                 &SANY_ADDR(ctx.hostaddr), SANY_LEN(ctx.hostaddr));
     if(ret == -1)
-        err(1, "couldn't send snmp packet to: %s", snmp_hostname);
+        err(1, "couldn't send snmp packet to: %s", ctx.hostname);
 
+    /* Some bookkeeping */
+    ctx.retries++;
+    ctx.lastsend = server_get_time();
 }
 
 static void
@@ -122,7 +129,7 @@ setup_req(char* uri)
 
     /* Parse the SNMP URI */
     copy = strdup(uri);
-    msg = cfg_parse_uri(uri, &scheme, &snmp_hostname, &user, &path);
+    msg = cfg_parse_uri(uri, &scheme, &ctx.hostname, &user, &path);
     if(msg)
         errx(2, "%s: %s", msg, copy);
     free(copy);
@@ -133,46 +140,52 @@ setup_req(char* uri)
     if(strcmp(scheme, "snmp") != 0)
         errx(2, "invalid scheme: %s", scheme);
 
-    if(sock_any_pton(snmp_hostname, &snmp_hostaddr,
+    if(sock_any_pton(ctx.hostname, &ctx.hostaddr,
                      SANY_OPT_DEFPORT(161) | SANY_OPT_DEFLOCAL) == -1)
-        err(1, "couldn't resolve host address (ignoring): %s", snmp_hostname);
+        err(1, "couldn't resolve host address (ignoring): %s", ctx.hostname);
 
-    memset(&snmp_data, 0, sizeof(snmp_data));
-    snmp_data.version = 1;
-    snmp_data.request_id = 0;
-    snmp_data.type = recursive ? SNMP_PDU_GETNEXT : SNMP_PDU_GET;
-    snmp_data.error_status = 0;
-    snmp_data.error_index = 0;
-    strlcpy(snmp_data.community, user ? user : "public",
-            sizeof(snmp_data.community));
+    memset(&ctx.pdu, 0, sizeof(ctx.pdu));
+    ctx.pdu.version = 1;
+    ctx.pdu.request_id = 0;
+    ctx.pdu.type = ctx.recursive ? SNMP_PDU_GETNEXT : SNMP_PDU_GET;
+    ctx.pdu.error_status = 0;
+    ctx.pdu.error_index = 0;
+    strlcpy(ctx.pdu.community, user ? user : "public",
+            sizeof(ctx.pdu.community));
 
 
     /* And parse the OID */
-    snmp_data.bindings[0].syntax = 0;
-    memset(&(snmp_data.bindings[0].v), 0, sizeof(snmp_data.bindings[0].v));
-    if(mib_parse(path, &(snmp_data.bindings[0].var)) == -1)
+    ctx.pdu.bindings[0].syntax = 0;
+    memset(&(ctx.pdu.bindings[0].v), 0, sizeof(ctx.pdu.bindings[0].v));
+    if(mib_parse(path, &(ctx.pdu.bindings[0].var)) == -1)
         errx(2, "invalid MIB: %s", path);
 
     /* Add an item to this request */
-    snmp_data.nbindings = 1;
+    ctx.pdu.nbindings = 1;
 
     /* Keep track of top for recursiveness */
-    memcpy(&oid_first, &(snmp_data.bindings[0].var), sizeof(oid_first));
+    memcpy(&ctx.oid_first, &(ctx.pdu.bindings[0].var), sizeof(ctx.oid_first));
 
+    /* Reset bookkeeping */
+    ctx.retries = 0;
+    ctx.lastsend = 0;
 }
 
 static void
 setup_next(struct snmp_value* value)
 {
-    snmp_data.request_id++;
-    snmp_data.type = SNMP_PDU_GETNEXT;
+    ctx.pdu.request_id++;
+    ctx.pdu.type = SNMP_PDU_GETNEXT;
 
     /* And parse the OID */
-    memcpy(&(snmp_data.bindings[0]), value, sizeof(struct snmp_value));
-    snmp_data.bindings[0].syntax = 0;
-    snmp_data.nbindings = 1;
-}
+    memcpy(&(ctx.pdu.bindings[0]), value, sizeof(struct snmp_value));
+    ctx.pdu.bindings[0].syntax = 0;
+    ctx.pdu.nbindings = 1;
 
+    /* Reset bookkeeping */
+    ctx.retries = 0;
+    ctx.lastsend = 0;
+}
 
 static int
 print_resp(struct snmp_pdu* pdu, uint64_t when)
@@ -187,10 +200,12 @@ print_resp(struct snmp_pdu* pdu, uint64_t when)
     {
         value = &(pdu->bindings[i]);
 
-        if(numeric)
-            printf("%s: ", asn_oid2str(&(value->var)));
+        if(ctx.numeric)
+            printf("%s", asn_oid2str(&(value->var)));
         else
             mib_format(&(value->var), stdout);
+
+        printf(": ");
 
         switch(value->syntax)
         {
@@ -255,7 +270,7 @@ receive_resp(int fd, int type, void* arg)
     /* Read in the packet */
 
     SANY_LEN(from) = sizeof(from);
-    len = recvfrom(snmp_socket, snmp_buffer, sizeof(snmp_buffer), 0,
+    len = recvfrom(ctx.socket, ctx.packet, sizeof(ctx.packet), 0,
                    &SANY_ADDR(from), &SANY_LEN(from));
     if(len < 0)
     {
@@ -268,7 +283,7 @@ receive_resp(int fd, int type, void* arg)
 
     /* Now parse the packet */
 
-    b.asn_ptr = snmp_buffer;
+    b.asn_ptr = ctx.packet;
     b.asn_len = len;
 
     ret = snmp_pdu_decode(&b, &pdu, &ip);
@@ -276,13 +291,12 @@ receive_resp(int fd, int type, void* arg)
         errx(1, "invalid snmp packet received from: %s", hostname);
 
     /* It needs to match something we're waiting for */
-    if(pdu.request_id != snmp_data.request_id)
+    if(pdu.request_id != ctx.pdu.request_id)
         return;
 
     /* Check for errors */
     if(pdu.error_status != SNMP_ERR_NOERROR)
     {
-        snmp_pdu_dump (&pdu);
         msg = snmp_get_errmsg (pdu.error_status);
         if(msg)
             errx(1, "snmp error from host '%s': %s", hostname, msg);
@@ -296,15 +310,15 @@ receive_resp(int fd, int type, void* arg)
     if(pdu.nbindings > 0)
     {
         val = &(pdu.bindings[pdu.nbindings - 1]);
-        subid = asn_compare_oid(&oid_first, &(val->var)) == 0 ||
-                asn_is_suboid(&oid_first, &(val->var));
+        subid = asn_compare_oid(&ctx.oid_first, &(val->var)) == 0 ||
+                asn_is_suboid(&ctx.oid_first, &(val->var));
     }
 
     /* Print the packet values */
-    if(!recursive || subid)
+    if(!ctx.recursive || subid)
         ret = print_resp(&pdu, server_get_time());
 
-    if(ret && recursive && subid)
+    if(ret && ctx.recursive && subid)
     {
         /* If recursive, move onto next one */
         setup_next(&(pdu.bindings[pdu.nbindings - 1]));
@@ -315,6 +329,23 @@ receive_resp(int fd, int type, void* arg)
     server_stop ();
 }
 
+static int
+send_timer(uint64_t when, void* arg)
+{
+    if(ctx.lastsend == 0)
+        return 1;
+
+    /* Check for timeouts */
+    if(ctx.lastsend + ctx.timeout < when)
+        errx(1, "timed out waiting for response from server");
+
+    /* Resend packets when no response */
+    if(ctx.retries < MAX_RETRIES && ctx.lastsend + RESEND_TIMEOUT < when)
+        send_req();
+
+    return 1;
+}
+
 /* -----------------------------------------------------------------------------
  * STARTUP
  */
@@ -322,7 +353,7 @@ receive_resp(int fd, int type, void* arg)
 static void
 usage()
 {
-    fprintf(stderr, "usage: rrdbot-get [-nr] snmp://community@host/oid\n");
+    fprintf(stderr, "usage: rrdbot-get [-Mnr] [-t timeout] [-m mibdir] snmp://community@host/oid\n");
     fprintf(stderr, "       rrdbot-get -V\n");
     exit(2);
 }
@@ -339,21 +370,45 @@ main(int argc, char* argv[])
 {
     struct sockaddr_in addr;
     char ch;
+    char* t;
+
+    /* Defaults */
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.socket = -1;
+    ctx.timeout = DEFAULT_TIMEOUT;
 
     /* Parse the arguments nicely */
-    while((ch = getopt(argc, argv, "nrV")) != -1)
+    while((ch = getopt(argc, argv, "m:Mnrt:V")) != -1)
     {
         switch(ch)
         {
 
+        /* mib directory */
+        case 'm':
+            mib_directory = optarg;
+            break;
+
+        /* MIB load warnings */
+        case 'M':
+            mib_warnings = 1;
+            break;
+
         /* Numeric output */
         case 'n':
-            numeric = 1;
+            ctx.numeric = 1;
             break;
 
         /* SNMP walk (recursive)*/
         case 'r':
-            recursive = 1;
+            ctx.recursive = 1;
+            break;
+
+        /* The timeout */
+        case 't':
+            ctx.timeout = strtoul(optarg, &t, 10);
+            if(*t)
+                errx(2, "invalid timeout: %s", optarg);
+            ctx.timeout *= 1000;
             break;
 
         /* Print version number */
@@ -375,22 +430,36 @@ main(int argc, char* argv[])
     if(argc != 1)
         usage();
 
-    setup_req (argv[0]);
+    server_init();
+
+    setup_req(argv[0]);
 
     /* Setup the SNMP socket */
-    snmp_socket = socket(PF_INET, SOCK_DGRAM, 0);
-    if(snmp_socket < 0)
+    ctx.socket = socket(PF_INET, SOCK_DGRAM, 0);
+    if(ctx.socket < 0)
         err(1, "couldn't open snmp socket");
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    if(bind(snmp_socket, (struct sockaddr*)&addr, sizeof(addr)) < 0)
+    if(bind(ctx.socket, (struct sockaddr*)&addr, sizeof(addr)) < 0)
         err(1, "couldn't listen on port");
-    if(server_watch(snmp_socket, SERVER_READ, receive_resp, NULL) == -1)
+    if(server_watch(ctx.socket, SERVER_READ, receive_resp, NULL) == -1)
         err(1, "couldn't listen on socket");
 
+    /* Send off first request */
     send_req();
 
+    /* We fire off the resend timer every 1/5 second */
+    if(server_timer(RESEND_TIMEOUT, send_timer, NULL) == -1)
+        err(1, "couldn't setup timer");
+
+    /* Wait for responses */
     server_run();
+
+    /* Done */
+    server_unwatch(ctx.socket);
+    close(ctx.socket);
+
+    server_uninit();
 
     return 0;
 }
