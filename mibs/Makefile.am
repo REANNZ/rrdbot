@@ -3,11 +3,13 @@ mibdir = $(datadir)/mib/
 
 mib_DATA = \
     AGENTX-MIB.txt \
+    BEGEMOT-MIB.txt \
     BGP4-MIB.txt \
     BRIDGE-MIB.txt \
     DISMAN-SCHEDULE-MIB.txt \
     DISMAN-SCRIPT-MIB.txt \
-     EtherLike-MIB.txt \
+    EtherLike-MIB.txt \
+    FOKUS-MIB.txt \
     GNOME-SMI.txt \
     HCNUM-TC.txt \
     HOST-RESOURCES-MIB.txt \
@@ -28,6 +30,7 @@ mib_DATA = \
     LM-SENSORS-MIB.txt \
     NOTIFICATION-LOG-MIB.txt \
     OSPF-MIB.txt \
+    REGEX-MIB.txt \
     RFC1155-SMI.txt \
     RFC1213-MIB.txt \
     RFC-1215.txt \
