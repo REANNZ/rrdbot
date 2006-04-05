@@ -176,7 +176,6 @@ mib_init()
     add_mibdir(mib_directory);
     read_all_mibs();
 
-    warnx("loaded all MIB files");
     initialized = 1;
 }
 
@@ -258,10 +257,8 @@ mib_get_node(struct asn_oid* oid)
 void
 mib_uninit()
 {
-    if(initialized) {
+    if(initialized)
         unload_all_mibs();
-        warnx("unloaded all MIB files");
-    }
     initialized = 0;
 }
 

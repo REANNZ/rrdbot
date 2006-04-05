@@ -226,7 +226,7 @@ main(int argc, char* argv[])
     g_state.timeout = DEFAULT_TIMEOUT;
 
     /* Parse the arguments nicely */
-    while((ch = getopt(argc, argv, "c:d:Mp:r:t:w:V")) != -1)
+    while((ch = getopt(argc, argv, "c:d:m:Mp:r:t:w:V")) != -1)
     {
         switch(ch)
         {
