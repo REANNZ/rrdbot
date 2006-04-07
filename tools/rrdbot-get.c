@@ -134,7 +134,7 @@ setup_req(char* uri)
         errx(2, "%s: %s", msg, copy);
     free(copy);
 
-    ASSERT(host && path);
+    ASSERT(ctx.hostname && path);
 
     /* Currently we only support SNMP pollers */
     if(strcmp(scheme, "snmp") != 0)
@@ -194,7 +194,7 @@ print_resp(struct snmp_pdu* pdu, uint64_t when)
     char *t;
     int i;
 
-    ASSERT(req->id == pdu->request_id);
+    ASSERT(ctx.pdu.request_id == pdu->request_id);
 
     for(i = 0; i < pdu->nbindings; i++)
     {
@@ -265,7 +265,7 @@ receive_resp(int fd, int type, void* arg)
     int len, ret, subid;
     int32_t ip;
 
-    ASSERT(snmp_socket == fd);
+    ASSERT(ctx.socket == fd);
 
     /* Read in the packet */
 
