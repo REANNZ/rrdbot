@@ -131,52 +131,52 @@ config_done(config_ctx* ctx)
     char *t;
 
     /* No polling specified */
-    if(!ctx->items)
-        return;
-
-    /* Make sure we found an interval */
-    if(ctx->interval == 0)
-        errx(2, "%s: no interval specified", ctx->confname);
-
-    if(ctx->timeout == 0)
-        ctx->timeout = g_state.timeout;
-
-    /* And a nice key for lookups */
-    snprintf(key, sizeof(key), "%d-%d:%s/%s.rrd", ctx->timeout,
-             ctx->interval, g_state.rrddir, ctx->confname);
-    key[sizeof(key) - 1] = 0;
-
-    /* See if we have one of these pollers already */
-    poll = (rb_poller*)hsh_get(g_state.poll_by_key, key, -1);
-    if(!poll)
+    if(ctx->items)
     {
-        poll = (rb_poller*)xcalloc(sizeof(*poll));
-        if(!hsh_set(g_state.poll_by_key, key, -1, poll))
-            errx(1, "out of memory");
+        /* Make sure we found an interval */
+        if(ctx->interval == 0)
+            errx(2, "%s: no interval specified", ctx->confname);
 
-        strcpy(poll->key, key);
-        t = strchr(poll->key, ':');
-        ASSERT(t);
-        poll->rrdname = t + 1;
+        if(ctx->timeout == 0)
+            ctx->timeout = g_state.timeout;
 
-        poll->interval = ctx->interval * 1000;
-        poll->timeout = ctx->timeout * 1000;
+        /* And a nice key for lookups */
+        snprintf(key, sizeof(key), "%d-%d:%s/%s.rrd", ctx->timeout,
+                 ctx->interval, g_state.rrddir, ctx->confname);
+        key[sizeof(key) - 1] = 0;
 
-        /* Add it to the main lists */
-        poll->next = g_state.polls;
-        g_state.polls = poll;
-    }
+        /* See if we have one of these pollers already */
+        poll = (rb_poller*)hsh_get(g_state.poll_by_key, key, -1);
+        if(!poll)
+        {
+            poll = (rb_poller*)xcalloc(sizeof(*poll));
+            if(!hsh_set(g_state.poll_by_key, key, -1, poll))
+                errx(1, "out of memory");
 
-    /* Get the last item and add to the list */
-    for(it = ctx->items; it->next; it = it->next)
+            strcpy(poll->key, key);
+            t = strchr(poll->key, ':');
+            ASSERT(t);
+            poll->rrdname = t + 1;
+
+            poll->interval = ctx->interval * 1000;
+            poll->timeout = ctx->timeout * 1000;
+
+            /* Add it to the main lists */
+            poll->next = g_state.polls;
+            g_state.polls = poll;
+        }
+
+        /* Get the last item and add to the list */
+        for(it = ctx->items; it->next; it = it->next)
+            it->poller = poll;
+
+        ASSERT(it);
         it->poller = poll;
 
-    ASSERT(it);
-    it->poller = poll;
-
-    /* Add the items to this poller */
-    it->next = poll->items;
-    poll->items = sort_items_by_host(ctx->items);
+        /* Add the items to this poller */
+        it->next = poll->items;
+        poll->items = sort_items_by_host(ctx->items);
+    }
 
     /*
      * This remains allocated for the life of the program as
