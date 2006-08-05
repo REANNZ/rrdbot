@@ -75,7 +75,10 @@ config_ctx;
 #define CONFIG_INTERVAL "interval"
 #define CONFIG_TIMEOUT "timeout"
 #define CONFIG_SOURCE "source"
+
 #define CONFIG_SNMP "snmp"
+#define CONFIG_SNMP2 "snmp2"
+#define CONFIG_SNMP2C "snmp2c"
 
 #define FIELD_VALID "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-0123456789."
 
@@ -205,6 +208,7 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
     rb_host *rhost;
     int r;
 
+    enum snmp_version version;
     const char *msg;
     char* copy;
     char* scheme;
@@ -221,10 +225,14 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
 
     ASSERT(host && path);
 
-    /* TODO: SNMP version support */
-
     /* Currently we only support SNMP pollers */
-    if(strcmp(scheme, CONFIG_SNMP) != 0)
+    if(strcmp(scheme, CONFIG_SNMP) == 0)
+        version = SNMP_V1;
+    else if(strcmp(scheme, CONFIG_SNMP2) == 0)
+        version = SNMP_V2c;
+    else if(strcmp(scheme, CONFIG_SNMP2C) == 0)
+        version = SNMP_V2c;
+    else
         errx(2, "%s: invalid poll scheme: %s", ctx->confname, scheme);
 
     /* TODO: THis code assumes all hosts have the same community
@@ -239,8 +247,7 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
         if(!hsh_set(g_state.host_by_name, host, -1, rhost))
             errx(1, "out of memory");
 
-        /* TODO: Version support */
-        rhost->version = 1;
+        rhost->version = version;
         rhost->name = host;
         rhost->community = user ? user : "public";
         rhost->is_resolved = 1;

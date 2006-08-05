@@ -2,6 +2,7 @@
     - Reduced memory usage of SNMP requests
     - Added asynchronous DNS resolver
     - Added support for RRD files not in the normal places
+    - Added SNMP version 2c support
     
 0.3
     - Initial public release
