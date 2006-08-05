@@ -63,38 +63,41 @@ errmsg(const char* filename, void* data, const char* msg, ...)
  */
 
 static char*
-read_config_file(const char* configfile, void* data)
+read_config_file(const char** configfile, void* data)
 {
     char* config = NULL;
+    char* newfilename;
     FILE* f = NULL;
     long len;
+    int flen;
 
     ASSERT(configfile);
 
-    f = fopen(configfile, "r");
+    f = fopen(*configfile, "r");
     if(f == NULL)
     {
-        errmsg(configfile, data, "couldn't open config file: %s", configfile);
+        errmsg(*configfile, data, "couldn't open config file: %s", *configfile);
         return NULL;
     }
 
     /* Figure out size */
     if(fseek(f, 0, SEEK_END) == -1 || (len = ftell(f)) == -1 || fseek(f, 0, SEEK_SET) == -1)
     {
-        errmsg(configfile, data, "couldn't seek config file: %s", configfile);
+        errmsg(*configfile, data, "couldn't seek config file: %s", *configfile);
         return NULL;
     }
 
-    if((config = (char*)malloc(len + 2)) == NULL)
+    flen = strlen(*configfile);
+    if((config = (char*)malloc(len + 4 + flen)) == NULL)
     {
-        errmsg(configfile, data, "out of memory");
+        errmsg(*configfile, data, "out of memory");
         return NULL;
     }
 
     /* And read in one block */
     if(fread(config, 1, len, f) != len)
     {
-        errmsg(configfile, data, "couldn't read config file: %s", configfile);
+        errmsg(*configfile, data, "couldn't read config file: %s", *configfile);
         return NULL;
     }
 
@@ -106,6 +109,11 @@ read_config_file(const char* configfile, void* data)
 
     /* Remove nasty dos line endings */
     strcln(config, '\r');
+
+    /* Persistent allocation for filename */
+    newfilename = config + len + 2;
+    strcpy(newfilename, *configfile);
+    *configfile = newfilename;
 
     return config;
 }
@@ -124,7 +132,7 @@ cfg_parse_file(const char* filename, void* data, char** memory)
 
     ASSERT(filename);
 
-    config = read_config_file(filename, data);
+    config = read_config_file(&filename, data);
     if(!config)
         goto finally;
 
@@ -163,7 +171,7 @@ cfg_parse_file(const char* filename, void* data, char** memory)
         /* No continuation hand off value if necessary */
         if(name && value)
         {
-            if(cfg_value(filename, header, name, value, data) == -1)
+            if(cfg_value(filename, header, name, strtrim(value), data) == -1)
                 goto finally;
         }
 
@@ -204,7 +212,7 @@ cfg_parse_file(const char* filename, void* data, char** memory)
         t++;
 
         name = strtrim(p);
-        value = strtrim(t);
+        value = t;
     }
 
     if(name && value)
