@@ -1,1 +1,6 @@
-None yet
+0.4
+    - Reduced memory usage of SNMP requests
+
+0.3
+    - Initial public release
+

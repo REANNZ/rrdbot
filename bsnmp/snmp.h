@@ -36,7 +36,7 @@
 #include <sys/types.h>
 
 #define SNMP_COMMUNITY_MAXLEN	128
-#define SNMP_MAX_BINDINGS	100
+#define SNMP_MAX_BINDINGS	16
 
 enum snmp_syntax {
 	SNMP_SYNTAX_NULL	= 0,
