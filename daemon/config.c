@@ -58,6 +58,7 @@
 typedef struct _config_ctx
 {
     const char* confname;
+    const char* rrdname;
     uint interval;
     uint timeout;
     rb_item* items;
@@ -68,6 +69,8 @@ config_ctx;
  * STRINGS
  */
 
+#define CONFIG_GENERAL "general"
+#define CONFIG_RRD "rrd"
 #define CONFIG_POLL "poll"
 #define CONFIG_INTERVAL "interval"
 #define CONFIG_TIMEOUT "timeout"
@@ -141,8 +144,12 @@ config_done(config_ctx* ctx)
             ctx->timeout = g_state.timeout;
 
         /* And a nice key for lookups */
-        snprintf(key, sizeof(key), "%d-%d:%s/%s.rrd", ctx->timeout,
-                 ctx->interval, g_state.rrddir, ctx->confname);
+        if(ctx->rrdname)
+            snprintf(key, sizeof(key), "%d-%d:%s", ctx->timeout, ctx->interval,
+                     ctx->rrdname);
+        else
+            snprintf(key, sizeof(key), "%d-%d:%s/%s.rrd", ctx->timeout,
+                     ctx->interval, g_state.rrddir, ctx->confname);
         key[sizeof(key) - 1] = 0;
 
         /* See if we have one of these pollers already */
@@ -293,6 +300,15 @@ config_value(const char* header, const char* name, char* value,
              config_ctx* ctx)
 {
     char* suffix;
+
+    if(strcmp(header, CONFIG_GENERAL) == 0)
+    {
+        if(strcmp(name, CONFIG_RRD) == 0)
+            ctx->rrdname = value;
+
+        /* Ignore other [general] options */
+        return;
+    }
 
     if(strcmp(header, CONFIG_POLL) != 0)
         return;

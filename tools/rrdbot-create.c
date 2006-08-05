@@ -55,6 +55,7 @@
 #define DEFAULT_WORK        "/var/db/rrdbot"
 
 #define CONFIG_CREATE   "create"
+#define CONFIG_GENERAL  "general"
 #define CONFIG_POLL     "poll"
 #define CONFIG_INTERVAL "interval"
 #define CONFIG_ARCHIVE  "archive"
@@ -62,6 +63,7 @@
 #define CONFIG_MIN      "min"
 #define CONFIG_MAX      "max"
 #define CONFIG_CF       "cf"
+#define CONFIG_RRD      "rrd"
 
 #define VAL_UNKNOWN     "U"
 #define VAL_ABSOLUTE    "ABSOLUTE"
@@ -125,6 +127,7 @@ typedef struct _create_ctx
 {
     const char* workdir;
     const char* confname;
+    const char* rrdname;
     uint interval;
     const char *cf;
     int create;
@@ -439,8 +442,13 @@ check_create_file(create_ctx* ctx)
     if(!ctx->create)
         return;
 
-    snprintf(rrd, sizeof(rrd), "%s/%s.rrd", ctx->workdir, ctx->confname);
-    rrd[sizeof(rrd) - 1] = 0;
+    if(ctx->rrdname)
+        strlcpy(rrd, ctx->rrdname, sizeof(rrd));
+    else
+    {
+        snprintf(rrd, sizeof(rrd), "%s/%s.rrd", ctx->workdir, ctx->confname);
+        rrd[sizeof(rrd) - 1] = 0;
+    }
 
     /* Make sure it exists */
     if(access(rrd, F_OK) == 0)
@@ -598,6 +606,16 @@ cfg_value(const char* filename, const char* header, const char* name,
                 ctx->skip = 1;
             }
         }
+
+        /* Ignore other options */
+        return 0;
+    }
+
+    if(strcmp(header, CONFIG_GENERAL) == 0)
+    {
+        /* rrd option */
+        if(strcmp(name, CONFIG_RRD) == 0)
+            ctx->rrdname = value;
 
         /* Ignore other options */
         return 0;

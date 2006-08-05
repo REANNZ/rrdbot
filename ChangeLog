@@ -1,6 +1,7 @@
 0.4
     - Reduced memory usage of SNMP requests
     - Added asynchronous DNS resolver
+    - Added support for RRD files not in the normal places
     
 0.3
     - Initial public release
