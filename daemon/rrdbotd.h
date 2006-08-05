@@ -100,8 +100,10 @@ typedef struct _rb_host
 
     /* Host resolving and book keeping */
     struct sockaddr_any address;
-    mstime interval;
+    mstime resolve_interval;
+    mstime last_resolve_try;
     mstime last_resolved;
+    int is_resolved;
 
     /* Next in list of hosts */
     struct _rb_host* next;
@@ -154,6 +156,9 @@ extern rb_state g_state;
 /* -----------------------------------------------------------------------------
  * UTILITIES (rrdbotd.c)
  */
+
+typedef void (*resolve_callback)(void *context, int unused, const char *name,
+                                 const unsigned char *addr, size_t addrlen);
 
 void rb_messagex(int level, const char* msg, ...);
 void rb_message(int level, const char* msg, ...);

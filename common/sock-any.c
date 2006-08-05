@@ -246,6 +246,7 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
   {
     struct addrinfo* res;
     int port = 0;
+    int family = 0;
     t = NULL;
 
     l = strlen(addr);
@@ -273,13 +274,33 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
         break;
     }
 
-    /* Try and resolve the domain name */
-    if(getaddrinfo(buf, NULL, NULL, &res) != 0 || !res)
-      break;
+    if(!(opts & SANY_OPT_NORESOLV))
+    {
+      /* Try and resolve the domain name */
+      if(getaddrinfo(buf, NULL, NULL, &res) != 0 || !res)
+        break;
 
-    memcpy(&(any->s.a), res->ai_addr, sizeof(struct sockaddr));
-    any->namelen = res->ai_addrlen;
-    freeaddrinfo(res);
+      memcpy(&(any->s.a), res->ai_addr, sizeof(struct sockaddr));
+      any->namelen = res->ai_addrlen;
+      family = any->s.a.sa_family;
+      freeaddrinfo(res);
+    }
+    else
+    {
+       family = SANY_AF_DNS;
+#ifdef HAVE_INET6
+       if(opt & SANY_OPT_DEFINET6)
+       {
+         any->s.a.sa_family = AF_INET6;
+         any->namelen = sizeof(any->s.in6);
+       }
+       else
+#endif
+       {
+         any->s.a.sa_family = AF_INET;
+         any->namelen = sizeof(any->s.in);
+       }
+    }
 
     port = htons((unsigned short)(port <= 0 ? defport : port));
 
@@ -295,7 +316,7 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
 #endif
     };
 
-    return any->s.a.sa_family;
+    return family;
   }
   while(0);
 

@@ -8,6 +8,7 @@ rrdbotd_SOURCES = rrdbotd.c rrdbotd.h config.c \
                 ../common/compat.h ../common/compat.c \
                 ../common/hash.h ../common/hash.c \
                 ../common/config-parser.h ../common/config-parser.c \
+                ../common/async-resolver.h ../common/async-resolver.c \
                 ../mib/mib-parser.h ../mib/mib-parser.c
 rrdbotd_CFLAGS = -I${top_srcdir}/common/ -I${top_srcdir}/bsnmp/ -I${top_srcdir} \
                  -DCONF_PREFIX=\"$(sysconfdir)\" -DDATA_PREFIX=\"$(datadir)\"

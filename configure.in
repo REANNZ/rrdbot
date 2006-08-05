@@ -26,6 +26,12 @@ AC_PROG_CC
 AC_PROG_INSTALL
 AC_PROG_RANLIB
 
+# TODO: Figure out why we need this wierd hack
+ACX_PTHREAD( , [echo "ERROR: Pthread support not found."; exit 1] )
+
+LIBS="$PTHREAD_LIBS $LIBS"
+CFLAGS="$CFLAGS $PTHREAD_CFLAGS -D_POSIX_PTHREAD_SEMANTICS"
+
 dnl Checks for libraries
 AC_CHECK_LIB(rrd, rrd_update, ,
     [echo "ERROR: librrd not found."; exit 1])

@@ -50,6 +50,7 @@
 
 #include "rrdbotd.h"
 #include "server-mainloop.h"
+#include "async-resolver.h"
 
 /* The default command line options */
 #define DEFAULT_CONFIG      CONF_PREFIX "/rrdbot"
@@ -134,14 +135,14 @@ rb_vmessage(int level, int err, const char* msg, va_list ap)
     buf[MAX_MSGLEN - 1] = 0;
 
     /* Either to syslog or stderr */
-    if (daemonized)
-        vsyslog (level, buf, ap);
+    if(daemonized)
+        vsyslog(level, buf, ap);
     else
-        vwarnx (buf, ap);
+        vwarnx(buf, ap);
 }
 
 void
-rb_messagex (int level, const char* msg, ...)
+rb_messagex(int level, const char* msg, ...)
 {
     va_list ap;
     va_start(ap, msg);
@@ -150,7 +151,7 @@ rb_messagex (int level, const char* msg, ...)
 }
 
 void
-rb_message (int level, const char* msg, ...)
+rb_message(int level, const char* msg, ...)
 {
     va_list ap;
     va_start(ap, msg);
@@ -301,6 +302,10 @@ main(int argc, char* argv[])
     /* The mainloop server */
     server_init();
 
+    /* Setup the Async DNS resolver */
+    if(async_resolver_init() < 0)
+        err(1, "couldn't initialize resolver");
+
     /* Parse config and setup SNMP system */
     rb_config_parse();
 
@@ -345,6 +350,7 @@ main(int argc, char* argv[])
     /* Cleanups */
     rb_snmp_engine_uninit();
     rb_config_free();
+    async_resolver_uninit();
     server_uninit();
 
     return 0;

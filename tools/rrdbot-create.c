@@ -469,6 +469,11 @@ add_rras(create_ctx* ctx, char* value)
     char* p;
     char* p2;
 
+    /*
+     * Looks like:
+     *     10/minute, 10/hour, 10/day, 10/week * 2, 1/month, 5/year
+     */
+
     while(value && *value)
     {
         per = num = 0;
@@ -522,7 +527,6 @@ add_rras(create_ctx* ctx, char* value)
             warnx("%s: invalid 'archive' time unit: %s", ctx->confname, p);
             return -1;
         }
-
 
         /* Parse out how many */
         if(p2)

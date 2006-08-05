@@ -64,6 +64,9 @@ struct sockaddr_any
 #define SANY_LEN(any)   ((any).namelen)
 #define SANY_TYPE(any)  ((any).s.a.sa_family)
 
+/* -------------------------------------------------------------------------- */
+
+/* Returns AF_XXX family type or -1 */
 int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts);
 
 /* The default port to fill in when no IP/IPv6 port specified */
@@ -76,15 +79,25 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts);
 #define SANY_OPT_DEFLOCAL       0x00100000
 
 /* When only port specified default to IPv6 */
-#ifdef HAVE_INET6
 #define SANY_OPT_DEFINET6       0x00200000
-#endif
 
+/* Don't resolve host name */
+#define SANY_OPT_NORESOLV       0x01000000
+
+/* The family type returned when resolving is needed */
+#define SANY_AF_DNS             0x01000000
+
+/* -------------------------------------------------------------------------- */
+
+/* Returns -1 when failed */
 int sock_any_ntop(const struct sockaddr_any* any, char* addr, size_t addrlen, int opts);
 
 /* Don't print or compare the port */
 #define SANY_OPT_NOPORT         0x01000000
 
+/* -------------------------------------------------------------------------- */
+
+/* Returns 0 for equal */
 int sock_any_cmp(const struct sockaddr_any* a1, const struct sockaddr_any* a2, int opts);
 
 #endif /* __SOCK_ANY_H__ */

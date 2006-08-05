@@ -1,5 +1,5 @@
 
-EXTRA_DIST = common mib
+EXTRA_DIST = common mib acsite.m4
 SUBDIRS = bsnmp daemon tools mibs
 
 # Clean up any EXTRA_DIST we're distributing

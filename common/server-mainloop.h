@@ -4,8 +4,6 @@
 
 #include <stdint.h>
 
-/* TODO: Prefix functions with svr */
-
 #define SERVER_READ       0x01
 #define SERVER_WRITE      0x02
 

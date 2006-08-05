@@ -37,16 +37,20 @@
  */
 
 #include "usuals.h"
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <errno.h>
 #include <unistd.h>
 #include <syslog.h>
 #include <err.h>
+#include <arpa/inet.h>
 
 #include <bsnmp/asn1.h>
 #include <bsnmp/snmp.h>
 
 #include "rrdbotd.h"
 #include "server-mainloop.h"
+#include "async-resolver.h"
 
 /* The socket to use */
 static int snmp_socket = -1;
@@ -61,7 +65,6 @@ static unsigned char snmp_buffer[0x1000];
  * REQUESTS
  */
 
-/* rb_request waaaaayyyyy too big */
 typedef struct _rb_request
 {
     /* The SNMP request identifier */
@@ -229,6 +232,23 @@ send_req(rb_request* req, mstime when)
     struct asn_buf b;
     ssize_t ret;
 
+    /* Update our bookkeeping */
+    req->sent++;
+    if(req->sent <= g_state.retries)
+        req->next_retry = when + req->interval;
+    else
+        req->next_retry = 0;
+    req->last_sent = when;
+
+    /* No sending if no address */
+    if(!req->host->is_resolved)
+    {
+        if(req->sent <= 1)
+            rb_messagex(LOG_DEBUG, "skipping snmp request: host not resolved: %s",
+                        req->host->name);
+        return;
+    }
+
     b.asn_ptr = snmp_buffer;
     b.asn_len = sizeof(snmp_buffer);
 
@@ -243,14 +263,6 @@ send_req(rb_request* req, mstime when)
         else
             rb_messagex(LOG_DEBUG, "sent request #%d to: %s", req->id, req->host->name);
     }
-
-    /* And update our bookkeeping */
-    req->sent++;
-    if(req->sent <= g_state.retries)
-        req->next_retry = when + req->interval;
-    else
-        req->next_retry = 0;
-    req->last_sent = when;
 }
 
 static void
@@ -272,7 +284,6 @@ timeout_req(rb_request* req, mstime when)
         if(it->req == req)
         {
             rb_messagex(LOG_DEBUG, "value for field '%s' timed out", it->rrdfield);
-
             it->vtype = VALUE_UNSET;
             it->req = NULL;
         }
@@ -601,6 +612,54 @@ prep_timer(mstime when, void* arg)
     return 0;
 }
 
+static void
+resolve_cb(int ecode, struct addrinfo* ai, void* arg)
+{
+    rb_host* host = (rb_host*)arg;
+
+    if(ecode)
+    {
+        rb_messagex(LOG_WARNING, "couldn't resolve hostname: %s: %s", host->name,
+                    gai_strerror(ecode));
+        return;
+    }
+
+    /* A successful resolve */
+    memcpy(&SANY_ADDR(host->address), ai->ai_addr, ai->ai_addrlen);
+    SANY_LEN(host->address) = ai->ai_addrlen;
+    host->last_resolved = server_get_time();
+    host->is_resolved = 1;
+
+    rb_messagex(LOG_DEBUG, "resolved host: %s", host->name);
+}
+
+static int
+resolve_timer(mstime when, void* arg)
+{
+    rb_host* host;
+
+    /* Go through hosts and see which ones need resolving */
+    for(host = g_state.hosts; host; host = host->next)
+    {
+        /* No need to resolve? */
+        if(!host->resolve_interval)
+            continue;
+
+        if(when - host->resolve_interval > host->last_resolve_try)
+        {
+            /* Automatically strips port number */
+            rb_messagex(LOG_DEBUG, "resolving host: %s", host->name);
+            async_resolver_queue(host->name, "161", resolve_cb, host);
+            host->last_resolve_try = when;
+        }
+
+        /* When the last 3 resolves have failed, set to unresolved */
+        if(when - (host->resolve_interval * 3) > host->last_resolved)
+            host->is_resolved = 0;
+    }
+
+    return 1;
+}
 
 void
 rb_snmp_engine_init()
@@ -635,6 +694,10 @@ rb_snmp_engine_init()
 
     /* We fire off the resend timer every 1/5 second */
     if(server_timer(200, resend_timer, NULL) == -1)
+        err(1, "couldn't setup timer");
+
+    /* resolve timer goes once per second */
+    if(server_timer(1000, resolve_timer, NULL) == -1)
         err(1, "couldn't setup timer");
 }
 

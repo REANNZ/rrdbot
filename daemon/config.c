@@ -196,6 +196,7 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
 {
     rb_item *ritem;
     rb_host *rhost;
+    int r;
 
     const char *msg;
     char* copy;
@@ -235,16 +236,28 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
         rhost->version = 1;
         rhost->name = host;
         rhost->community = user ? user : "public";
+        rhost->is_resolved = 1;
+        rhost->resolve_interval = 0;
+        rhost->last_resolved = 0;
 
-        /* TODO: Eventually resolving should be in a separate thread,
-           and done regularly */
-        if(sock_any_pton(host, &(rhost->address),
-                         SANY_OPT_DEFPORT(161) | SANY_OPT_DEFLOCAL) == -1)
+        /* Try and resolve the DNS name */
+        r = sock_any_pton(host, &(rhost->address),
+                         SANY_OPT_DEFPORT(161) | SANY_OPT_DEFLOCAL | SANY_OPT_NORESOLV);
+
+        if(r == -1)
         {
-            rb_message(LOG_WARNING, "couldn't resolve host address (ignoring): %s", host);
+            rb_message(LOG_WARNING, "couldn't parse host address (ignoring): %s", host);
             free(rhost);
             return NULL;
         }
+
+        /*
+         * If we got back SANY_AF_DNS, then it needs resolving. The actual
+         * interval and stuff are worked out in rb_config_parse() once all
+         * the hosts, polls etc... have been parsed.
+         */
+        if(r == SANY_AF_DNS)
+            rhost->is_resolved = 0;
 
         /* And add it to the list */
         rhost->next = g_state.hosts;
@@ -346,6 +359,7 @@ void
 rb_config_parse()
 {
     config_ctx ctx;
+    rb_poller* poll;
 
     /* Setup the hash tables properly */
     g_state.poll_by_key = hsh_create();
@@ -358,6 +372,35 @@ rb_config_parse()
 
     if(!g_state.polls)
         errx(1, "no config files found in config directory: %s", g_state.confdir);
+
+    /* Organize the async resolve intervals */
+    for(poll = g_state.polls; poll; poll = poll->next)
+    {
+        rb_item *item;
+        mstime resint;
+
+        /* When less than three minutes, resolve once per minute */
+        if(poll->interval <= 180000)
+            resint = 60000;
+
+        /* When between 3 and 10 minutes resolve once per cycle */
+        else if(poll->interval <= 600000)
+            resint = poll->interval;
+
+        /* Otherwise resolve thrice per cycle */
+        else
+            resint = poll->interval / 3;
+
+        for(item = poll->items; item; item = item->next)
+        {
+            /* The lowest interval (since hosts can be shared by pollers) wins */
+            if(!item->host->is_resolved && item->host->resolve_interval < resint)
+            {
+                rb_host* host = (rb_host*)item->host;
+                host->resolve_interval = resint;
+            }
+        }
+    }
 }
 
 /* -----------------------------------------------------------------------------
