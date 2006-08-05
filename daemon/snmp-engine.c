@@ -541,11 +541,11 @@ receive_resp(int fd, int type, void* arg)
     {
         msg = snmp_get_errmsg (pdu.error_status);
         if(msg)
-            rb_message(LOG_ERR, "snmp error from host '%s': %s",
-                       hostname, msg);
+            rb_messagex(LOG_ERR, "snmp error from host '%s': %s",
+                        hostname, msg);
         else
-            rb_message(LOG_ERR, "unknown snmp error from host '%s': %d",
-                       hostname, pdu.error_status);
+            rb_messagex(LOG_ERR, "unknown snmp error from host '%s': %d",
+                        hostname, pdu.error_status);
         return;
     }
 
