@@ -458,16 +458,19 @@ check_create_file(create_ctx* ctx)
         rrd[sizeof(rrd) - 1] = 0;
     }
 
-    /* Make sure it exists */
-    if(access(rrd, F_OK) == 0)
+    if(!g_print)
     {
-        verb("rrd file already exists, skipping: %s", rrd);
-        return;
-    }
-    else if(errno != ENOENT)
-    {
-        warn("couldn't check rrd file: %s", rrd);
-        return;
+        /* Make sure it exists */
+        if(access(rrd, F_OK) == 0)
+        {
+            verb("rrd file already exists, skipping: %s", rrd);
+            return;
+        }
+        else if(errno != ENOENT)
+        {
+            warn("couldn't check rrd file: %s", rrd);
+            return;
+        }
     }
 
     if(ctx->skip || create_file(ctx, rrd) < 0)
