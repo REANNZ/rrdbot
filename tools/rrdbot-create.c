@@ -70,23 +70,31 @@
 #define VAL_GAUGE       "GAUGE"
 #define VAL_COUNTER     "COUNTER"
 #define VAL_DERIVE      "DERIVE"
-#define VAL_COMPUTE     "COMPUTE"
 #define VAL_AVERAGE     "AVERAGE"
 #define VAL_MIN         "MIN"
 #define VAL_MAX         "MAX"
 #define VAL_LAST        "LAST"
 
+#define VAL_SECOND      "second"
+#define VAL_SECONDS     "seconds"
+#define VAL_SECONDLY    "secondly"
 #define VAL_MINUTE      "minute"
+#define VAL_MINUTES     "minutes"
 #define VAL_MINUTELY    "minutely"
 #define VAL_HOUR        "hour"
+#define VAL_HOURS       "hours"
 #define VAL_HOURLY      "hourly"
 #define VAL_DAY         "day"
+#define VAL_DAYS        "days"
 #define VAL_DAILY       "daily"
 #define VAL_WEEK        "week"
+#define VAL_WEEKS       "weeks"
 #define VAL_WEEKLY      "weekly"
 #define VAL_MONTH       "month"
+#define VAL_MONTHS      "months"
 #define VAL_MONTHLY     "monthly"
 #define VAL_YEAR        "year"
+#define VAL_YEARS       "years"
 #define VAL_YEARLY      "yearly"
 
 #define FIELD_VALID     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-0123456789."
@@ -110,7 +118,7 @@ typedef struct _rra_arg
 {
     uint num;
     uint per;
-    uint many;
+    uint total;
 
     struct _rra_arg* next;
 }
@@ -329,7 +337,7 @@ create_file(create_ctx* ctx, const char* rrd)
     {
         ASSERT(rra->per);
         ASSERT(rra->num);
-        ASSERT(rra->many);
+        ASSERT(rra->total);
 
         steps = (rra->per / rra->num) / ctx->interval;
         if(!steps)
@@ -338,7 +346,7 @@ create_file(create_ctx* ctx, const char* rrd)
                   ctx->confname);
             continue;
         }
-        rows = (rra->per * rra->many) / (ctx->interval * steps);
+        rows = rra->total / (ctx->interval * steps);
 
         arg = (create_arg*)xcalloc(sizeof(create_arg));
         snprintf(arg->buf, sizeof(arg->buf), "RRA:%s:0.6:%d:%d",
@@ -390,7 +398,7 @@ create_file(create_ctx* ctx, const char* rrd)
             verb("creating rrd with command:");
 
         if(g_verbose || g_print)
-            fprintf(stderr, "# rrd create '%s' -b-1y ", rrd);
+            fprintf(stderr, "# rrdtool create '%s' -b-1y ", rrd);
 
         for(arg = args; arg; arg = arg->next)
         {
@@ -431,7 +439,7 @@ create_file(create_ctx* ctx, const char* rrd)
     return 0;
 }
 
-void
+static void
 check_create_file(create_ctx* ctx)
 {
     char rrd[MAXPATHLEN];
@@ -466,12 +474,49 @@ check_create_file(create_ctx* ctx)
         warnx("skipping rrd creation due to configuration errors: %s", rrd);
 }
 
+static uint
+unit_to_seconds(char* unit)
+{
+    strlwr(unit);
+    if(strcmp(unit, VAL_SECOND) == 0 ||
+            strcmp(unit, VAL_SECONDS) == 0 ||
+            strcmp(unit, VAL_SECONDLY) == 0)
+        return 1;
+    else if(strcmp(unit, VAL_MINUTE) == 0 ||
+            strcmp(unit, VAL_MINUTES) == 0 ||
+            strcmp(unit, VAL_MINUTELY) == 0)
+        return 60;
+    else if(strcmp(unit, VAL_HOUR) == 0 ||
+            strcmp(unit, VAL_HOURS) == 0 ||
+            strcmp(unit, VAL_HOURLY) == 0)
+        return 3600;
+    else if(strcmp(unit, VAL_DAY) == 0 ||
+            strcmp(unit, VAL_DAYS) == 0 ||
+            strcmp(unit, VAL_DAILY) == 0)
+        return 86400;
+    else if(strcmp(unit, VAL_WEEK) == 0 ||
+            strcmp(unit, VAL_WEEKS) == 0 ||
+            strcmp(unit, VAL_WEEKLY) == 0)
+        return 604800;
+    else if(strcmp(unit, VAL_MONTH) == 0 ||
+            strcmp(unit, VAL_MONTHS) == 0 ||
+            strcmp(unit, VAL_MONTHLY) == 0)
+        return 2592000;
+    else if(strcmp(unit, VAL_YEAR) == 0 ||
+            strcmp(unit, VAL_YEARS) == 0 ||
+            strcmp(unit, VAL_YEARLY) == 0)
+        return 31536000;
+    else
+        return 0;
+}
+
 static int
 add_rras(create_ctx* ctx, char* value)
 {
     uint per;
     uint num;
     uint many;
+    uint unit;
     rra_arg* rra;
     char* t;
     char* p;
@@ -479,7 +524,7 @@ add_rras(create_ctx* ctx, char* value)
 
     /*
      * Looks like:
-     *     10/minute, 10/hour, 10/day, 10/week * 2, 1/month, 5/year
+     *     10/minute, 10/hour, 10/day, 10/week * 2 weeks, 1/month * 1year, 5/year
      */
 
     while(value && *value)
@@ -515,22 +560,9 @@ add_rras(create_ctx* ctx, char* value)
         if(p2)
             *(p2)++ = 0;
 
-        strtrim(p);
-        strlwr(p);
-
-        if(strcmp(p, VAL_MINUTE) == 0 || strcmp(p, VAL_MINUTELY) == 0)
-            per = 60;
-        else if(strcmp(p, VAL_HOUR) == 0 || strcmp(p, VAL_HOURLY) == 0)
-            per = 3600;
-        else if(strcmp(p, VAL_DAY) == 0 || strcmp(p, VAL_DAILY) == 0)
-            per = 86400;
-        else if(strcmp(p, VAL_WEEK) == 0 || strcmp(p, VAL_WEEKLY) == 0)
-            per = 604800;
-        else if(strcmp(p, VAL_MONTH) == 0 || strcmp(p, VAL_MONTHLY) == 0)
-            per = 2592000;
-        else if(strcmp(p, VAL_YEAR) == 0 || strcmp(p, VAL_YEARLY) == 0)
-            per = 31536000;
-        else
+        p = strtrim(p);
+        unit = per = unit_to_seconds(p);
+        if(per <= 0)
         {
             warnx("%s: invalid 'archive' time unit: %s", ctx->confname, p);
             return -1;
@@ -541,17 +573,29 @@ add_rras(create_ctx* ctx, char* value)
         {
             strtrim(p2);
             many = strtoul(p2, &p, 10);
-            if(*p || many <= 0)
+            if(many <= 0)
             {
                 warnx("%s: invalid 'archive' count: %s", ctx->confname, p2);
                 return -1;
+            }
+
+            /* Is there a unit in the many? */
+            p = strtrim(p);
+            if(*p)
+            {
+                unit = unit_to_seconds(p);
+                if(unit <= 0)
+                {
+                    warnx("%s: invalid 'archive' time unit: %s", ctx->confname, p);
+                    return -1;
+                }
             }
         }
 
         rra = (rra_arg*)xcalloc(sizeof(rra_arg));
         rra->num = num;
         rra->per = per;
-        rra->many = many;
+        rra->total = many * unit;
         rra->next = ctx->rras;
         ctx->rras = rra;
         value = t;
@@ -685,8 +729,7 @@ cfg_value(const char* filename, const char* header, const char* name,
         if(strcmp(value, VAL_ABSOLUTE) == 0 ||
            strcmp(value, VAL_COUNTER) == 0 ||
            strcmp(value, VAL_GAUGE) == 0 ||
-           strcmp(value, VAL_DERIVE) == 0 ||
-           strcmp(value, VAL_COMPUTE) == 0)
+           strcmp(value, VAL_DERIVE) == 0)
         {
             field_for(ctx, (char*)name)->dst = value;
         }
