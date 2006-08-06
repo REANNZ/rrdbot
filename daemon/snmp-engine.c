@@ -245,7 +245,7 @@ send_req(rb_request* req, mstime when)
     {
         if(req->sent <= 1)
             rb_messagex(LOG_DEBUG, "skipping snmp request: host not resolved: %s",
-                        req->host->name);
+                        req->host->hostname);
         return;
     }
 
@@ -259,9 +259,9 @@ send_req(rb_request* req, mstime when)
         ret = sendto(snmp_socket, snmp_buffer, b.asn_ptr - snmp_buffer, 0,
                      &SANY_ADDR(req->host->address), SANY_LEN(req->host->address));
         if(ret == -1)
-            rb_message(LOG_ERR, "couldn't send snmp packet to: %s", req->host->name);
+            rb_message(LOG_ERR, "couldn't send snmp packet to: %s", req->host->hostname);
         else
-            rb_messagex(LOG_DEBUG, "sent request #%d to: %s", req->id, req->host->name);
+            rb_messagex(LOG_DEBUG, "sent request #%d to: %s", req->id, req->host->hostname);
     }
 }
 
@@ -619,7 +619,7 @@ resolve_cb(int ecode, struct addrinfo* ai, void* arg)
 
     if(ecode)
     {
-        rb_messagex(LOG_WARNING, "couldn't resolve hostname: %s: %s", host->name,
+        rb_messagex(LOG_WARNING, "couldn't resolve hostname: %s: %s", host->hostname,
                     gai_strerror(ecode));
         return;
     }
@@ -630,7 +630,7 @@ resolve_cb(int ecode, struct addrinfo* ai, void* arg)
     host->last_resolved = server_get_time();
     host->is_resolved = 1;
 
-    rb_messagex(LOG_DEBUG, "resolved host: %s", host->name);
+    rb_messagex(LOG_DEBUG, "resolved host: %s", host->hostname);
 }
 
 static int
@@ -648,8 +648,8 @@ resolve_timer(mstime when, void* arg)
         if(when - host->resolve_interval > host->last_resolve_try)
         {
             /* Automatically strips port number */
-            rb_messagex(LOG_DEBUG, "resolving host: %s", host->name);
-            async_resolver_queue(host->name, "161", resolve_cb, host);
+            rb_messagex(LOG_DEBUG, "resolving host: %s", host->hostname);
+            async_resolver_queue(host->hostname, "161", resolve_cb, host);
             host->last_resolve_try = when;
         }
 

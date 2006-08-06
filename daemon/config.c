@@ -160,8 +160,6 @@ config_done(config_ctx* ctx)
         if(!poll)
         {
             poll = (rb_poller*)xcalloc(sizeof(*poll));
-            if(!hsh_set(g_state.poll_by_key, key, -1, poll))
-                errx(1, "out of memory");
 
             strcpy(poll->key, key);
             t = strchr(poll->key, ':');
@@ -174,6 +172,10 @@ config_done(config_ctx* ctx)
             /* Add it to the main lists */
             poll->next = g_state.polls;
             g_state.polls = poll;
+
+            /* And into the hashtable */
+            if(!hsh_set(g_state.poll_by_key, poll->key, -1, poll))
+                errx(1, "out of memory");
         }
 
         /* Get the last item and add to the list */
@@ -204,6 +206,7 @@ config_done(config_ctx* ctx)
 static rb_item*
 parse_item(const char* field, char* uri, config_ctx *ctx)
 {
+    char key[128];
     rb_item *ritem;
     rb_host *rhost;
     int r;
@@ -235,21 +238,24 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
     else
         errx(2, "%s: invalid poll scheme: %s", ctx->confname, scheme);
 
-    /* TODO: THis code assumes all hosts have the same community
-       the lookups below won't work wehn host/community is different */
+    /*
+     * Build a lookup key. We can only combine requests for the same
+     * host when the version and community match.
+     */
+    user = user ? user : "public";
+    snprintf(key, sizeof(key), "%d:%s:%s", version, host, user);
+    key[sizeof(key) - 1] = 0;
 
     /* See if we can find an associated host */
-    rhost = (rb_host*)hsh_get(g_state.host_by_name, host, -1);
+    rhost = (rb_host*)hsh_get(g_state.host_by_key, key, -1);
     if(!rhost)
     {
         /* Make a new one if necessary */
         rhost = (rb_host*)xcalloc(sizeof(*rhost));
-        if(!hsh_set(g_state.host_by_name, host, -1, rhost))
-            errx(1, "out of memory");
 
         rhost->version = version;
-        rhost->name = host;
-        rhost->community = user ? user : "public";
+        rhost->hostname = host;
+        rhost->community = user;
         rhost->is_resolved = 1;
         rhost->resolve_interval = 0;
         rhost->last_resolved = 0;
@@ -276,6 +282,10 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
         /* And add it to the list */
         rhost->next = g_state.hosts;
         g_state.hosts = rhost;
+
+        /* And into the hash table */
+        if(!hsh_set(g_state.host_by_key, rhost->key, -1, rhost))
+            errx(1, "out of memory");
     }
 
     /* Make a new item */
@@ -386,7 +396,7 @@ rb_config_parse()
 
     /* Setup the hash tables properly */
     g_state.poll_by_key = hsh_create();
-    g_state.host_by_name = hsh_create();
+    g_state.host_by_key = hsh_create();
 
     memset(&ctx, 0, sizeof(ctx));
 
@@ -514,7 +524,7 @@ void
 rb_config_free()
 {
     hsh_free(g_state.poll_by_key);
-    hsh_free(g_state.host_by_name);
+    hsh_free(g_state.host_by_key);
 
     free_hosts(g_state.hosts);
 

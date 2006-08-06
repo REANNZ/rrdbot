@@ -94,7 +94,10 @@ rb_item;
 
 typedef struct _rb_host
 {
-    const char* name;
+    /* The hash key is version:hostname:community */
+    char key[128];
+
+    const char* hostname;
     const char* community;
     int version;
 
@@ -146,7 +149,7 @@ typedef struct _rb_state
 
     /* Quick lookups for responses */
     hsh_t* poll_by_key;
-    hsh_t* host_by_name;
+    hsh_t* host_by_key;
 }
 rb_state;
 
