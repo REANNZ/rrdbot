@@ -36,12 +36,6 @@
  *
  */
 
-/*
- * This file is not compiled on it's own. It's included into parse.c
- * and provides compatibility definitions for making it work without
- * the rest of net-snmp
- */
-
 #include "usuals.h"
 #include <sys/types.h>
 #include <stdlib.h>
