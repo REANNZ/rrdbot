@@ -354,7 +354,7 @@ cfg_parse_uri (char *uri, char** scheme, char** host, char** user, char** path)
     if(!*host[0])
         return "invalid uri: no host name found";
 
-    if(!uri || !uri[0] || !uri[1])
+    if(!uri || !uri[0])
         return "invalid uri: no path found";
 
     *path = uri;

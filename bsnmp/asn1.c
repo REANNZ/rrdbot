@@ -632,7 +632,7 @@ asn_put_objid(struct asn_buf *b, const struct asn_oid *oid)
 		oidlen = 2;
 	} else if (oid->len == 1) {
 		/* illegal */
-		asn_error(b, "short oid");
+		asn_error(NULL, "short oid");
 		if (oid->subs[0] > 2)
 			asn_error(NULL, "oid[0] too large (%u)", oid->subs[0]);
 		err = ASN_ERR_RANGE;
