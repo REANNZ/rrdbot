@@ -1,0 +1,264 @@
+.\" 
+.\" Copyright (c) 2006, Nate Nielsen
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without 
+.\" modification, are permitted provided that the following conditions 
+.\" are met:
+.\" 
+.\"     * Redistributions of source code must retain the above 
+.\"       copyright notice, this list of conditions and the 
+.\"       following disclaimer.
+.\"     * Redistributions in binary form must reproduce the 
+.\"       above copyright notice, this list of conditions and 
+.\"       the following disclaimer in the documentation and/or 
+.\"       other materials provided with the distribution.
+.\"     * The names of contributors to this software may not be 
+.\"       used to endorse or promote products derived from this 
+.\"       software without specific prior written permission.
+.\" 
+.\" THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+.\" "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+.\" LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS 
+.\" FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE 
+.\" COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, 
+.\" INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
+.\" BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS 
+.\" OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
+.\" AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
+.\" OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF 
+.\" THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH 
+.\" DAMAGE.
+.\" 
+.\"
+.\" CONTRIBUTORS
+.\"  Nate Nielsen <nielsen@memberwebs.com>
+.\"
+.Dd August, 2006
+.Dt rrdbot.conf 5
+.Os rrdbot 
+.Sh NAME
+.Nm rrdbot.conf
+.Nd configuration files for 
+.Xr rrdbotd 8
+.Sh DESCRIPTION
+.Xr rrdbotd 8
+is an SNMP polling daemon. It writes out the polled values to an 
+.Xr rrdtool 1 
+database. The configuration files describe what to poll and where the resulting
+RRD files are. 
+.Pp
+The configuration files may be used by more than one program, for example 
+.Xr rrdbotd 8 ,
+or 
+.Xr rrdbot-create 8 .
+Some settings are shared between programs, while many are program specific. 
+Settings not recognized are ignored.
+.Pp
+An RRD file might only have one 'field' of values, or there may be multiple values
+which are stored together. Each of the fields have a name. Certain settings in the 
+configuration file are used per field. Where you see 
+.Ar <field> 
+in the documentaion below, substitute the appropriate RRD field name.
+.Sh SYNTAX
+The general syntax of an RRD file is as follows:
+.Bd -literal -offset indent
+# Comment
+[header]
+setting: a value here
+field.setting: part of value
+               continuation of value
+.Ed
+.Pp
+The configuration file is broken into blocks separated by headers. The header 
+sections each have different sets of options and are described below.
+.Pp
+The setting name (including a field name if necessary) is followed by a colon
+and then the value. Values may be continued onto successive lines, as long as 
+those lines are indented with spaces or tabs.
+.Pp
+Comments start with a # character at the leftmost margin.
+.Sh GENERAL SETTINGS
+These settings go under the 
+.Ar [general]
+header in a configuration file.
+.Bl -tag -width Fl
+.It Ar rrd 
+The location of the RRD file. If not specified these are chosen automatically.
+See the FILE LOCATIONS topic below. When specified this should be a full path.
+.Pp
+[ Optional ]
+.El
+.Sh POLL SETTINGS
+Settings to control when and how the SNMP source is polled by 
+.Xr rrdbotd 8 . 
+These settings go under the
+.Ar [poll]
+heading. 
+.Bl -tag -width Fl
+.It Ar interval
+The interval (in seconds) at which to retrieve the SNMP values and store them in 
+the RRD file.
+.Pp
+[ Required for 
+.Xr rrdbotd 8 
+]
+.It Ar <field>.source
+Specifies the SNMP source and OID in a URL format. The 
+.Ar <field> 
+above should be replaced with the RRD field name. Multiple 
+.Ar xxxxx.source 
+options can be specified if the RRD file has multiple fields. The syntax of the 
+SNMP url is as follows:
+.Bd -literal -offset indent
+snmp[version]://community@host[:port]/oid
+.Ed
+.Pp
+The following are valid SNMP urls:
+.Bd -literal -offset indent
+snmp://public@gateway.example.com/sysUptime.0
+snmp2c://mycommunity@uplink.example.com/ifInOctets.2
+snmp://public@www.example.com:10161/1.3.6.1.2.1.1.3.0
+.Ed
+.Pp
+To test that your SNMP urls are correct you can use the 
+.Xr rrdbot-get 1
+utility.
+.Pp
+[ Required for 
+.Xr rrdbotd 8 
+]
+.It Ar timeout
+The timeout (in seconds) to wait for an SNMP response.
+.El
+.Sh CREATE SETTINGS
+These settings are used by the 
+.Xr rrdbot-create 8
+tool to automatically create RRD files for you. Put these settings under the 
+.Ar [create]
+header.
+.Bl -tag -width Fl
+.It Ar archive
+The archives of values you would like to keep in your RRD. There can be multiple 
+archives specified, separated by commas. The syntax of an archive is as follows:
+.Bd -literal -offset indent
+<count>/<unit> * <how-many> <units>
+.Ed
+.Pp
+The example below describes three archives of "2 per minute for 1 week", 
+"4 per hour for 3 months", "3 per day for 1 year":
+.Bd -literal -offset indent
+2/minute * 1 weeks, 4/hour * 3 months, 3/day * 1 year
+.Ed
+.Pp
+[ Required for 
+rrdbot-create 8
+]
+.It Ar cf
+This is the consolidation function to use to consolidate RRD values when 
+archiving them. This applies to all fields in the RRD. The valid settings are:
+.Bl -tag -width Fl
+.It Ar AVERAGE 
+Average out the values when archiving them.
+.It Ar LAST
+Use the last value in the set to be archived.
+.It Ar MAX
+Use the maximum value in the set to be archived.
+.It Ar MIN
+Use the minimum value in the set to be archived.
+.El
+.Pp
+[ Default: 
+.Ar AVERAGE 
+]
+.It Ar <field>.max
+The maximum value for the field. Use the character
+.Ar U
+to specify that there is no maximum (unbounded).
+.Pp
+[ Default: 
+.Ar U 
+]
+.It Ar <field>.min
+The minimum value for the field. Use the character 
+.Ar U 
+to specify that there is no minimum (unbounded).
+.Pp
+[ Default: 
+.Ar U 
+]
+.It Ar <field>.type
+The type of values that will be stored in this field. For more info see the 
+.Xr rrdcreate 1
+manual. The types are:
+.Bl -tag -width Fl
+.It Ar ABSOLUTE 
+Used for counters that get reset when read.
+.It Ar COUNTER
+For values that increment between reads. 
+.It Ar DERIVE
+Used to measure rates of increase or decrease.
+.It Ar GAUGE
+For values that are current, for example the temperature.
+.El
+.Pp
+[ Default:
+.Ar ABSOLUTE
+]
+.El
+.Sh FILE LOCATIONS
+To determine the default location for the configuration files and RRD files 
+run this command:
+.Bd -literal -offset indent
+# rrdbotd -V 
+.Ed
+.Pp
+The configuration files for SNMP pollers are laid out in a directory tree, 
+with one file per RRD. Subdirectories can be used to organize the 
+configuration files. The contents of the configuration files are described 
+in 
+.Xr rrdbot.conf 5 .
+.Pp
+By default the RRD files mirror the directory structure and names of the 
+configuration files, with an 
+.Pa .rrd
+extension appended to the filename.
+.Pp
+For example if your configuration files are in a structure like the following:
+.Bd -literal -offset indent
+/usr/local/etc/rrdbot/
+  gateways/
+    gateway-load.conf
+    gateway-traffic.conf
+  temperature/
+    inside-temperature.conf
+    outside-temperature.conf
+  machine-load.conf  
+.Ed
+.Pp
+Then the default RRD files would be in a similar directory structure:
+.Bd -literal -offset indent
+/var/db/rrdbot/
+  gateways/
+    gateway-load.conf.rrd
+    gateway-traffic.conf.rrd
+  temperature/
+    inside-temperature.conf.rrd
+    outside-temperature.conf.rrd
+  machine-load.conf.rrd
+.Ed
+.Pp
+The default location for an RRD file can be overridden by using the 
+.Ar rrd
+option in the configuration file.
+.Pp
+Once you have configuration files in place, you can use the 
+.Xr rrdbot-create 8
+tool to create the needed RRD files in the appropriate places. 
+.Sh SEE ALSO
+.Xr rrdbotd 8 ,
+.Xr rrdbot-create 8 ,
+.Xr rrdbot-get 1 ,
+.Xr rrdtool 1
+.Sh AUTHOR
+.An Nate Nielsen Aq nielsen@memberwebs.com

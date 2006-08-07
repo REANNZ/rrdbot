@@ -1,0 +1,154 @@
+.\" 
+.\" Copyright (c) 2006, Nate Nielsen
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without 
+.\" modification, are permitted provided that the following conditions 
+.\" are met:
+.\" 
+.\"     * Redistributions of source code must retain the above 
+.\"       copyright notice, this list of conditions and the 
+.\"       following disclaimer.
+.\"     * Redistributions in binary form must reproduce the 
+.\"       above copyright notice, this list of conditions and 
+.\"       the following disclaimer in the documentation and/or 
+.\"       other materials provided with the distribution.
+.\"     * The names of contributors to this software may not be 
+.\"       used to endorse or promote products derived from this 
+.\"       software without specific prior written permission.
+.\" 
+.\" THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+.\" "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+.\" LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS 
+.\" FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE 
+.\" COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, 
+.\" INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
+.\" BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS 
+.\" OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
+.\" AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
+.\" OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF 
+.\" THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH 
+.\" DAMAGE.
+.\" 
+.\"
+.\" CONTRIBUTORS
+.\"  Nate Nielsen <nielsen@memberwebs.com>
+.\"
+.Dd August, 2006
+.Dt rrdbotd 8
+.Os rrdbot 
+.Sh NAME
+.Nm rddbotd
+.Nd an SNMP poller which writes to an round robin database
+.Sh SYNOPSIS
+.Nm
+.Op Fl M
+.Op Fl c Ar confdir
+.Op Fl w Ar workdir
+.Op Fl m Ar mibdir
+.Op Fl d Ar debuglevel
+.Op Fl p Ar pidfile
+.Op Fl r Ar retries
+.Op Fl t Ar timeout
+.Nm 
+.Fl V
+.Sh DESCRIPTION
+.Nm
+is an SNMP polling daemon which writes the polled values to an 
+.Xr rrdtool 1
+RRD database. An can poll many different SNMP sources in an efficient manner. 
+.Pp
+The configuration (eg: SNMP sources, polling intervals) are located in files 
+in a directory, with one configuration file per RRD. The format of the 
+configuration files are described in:
+.Xr rrdbot.conf 5
+.Sh OPTIONS
+The options are as follows. 
+.Bl -tag -width Fl
+.It Fl c Ar confdir
+The directory in which configuration files are stored. See below for info
+on the various file locations.
+.It Fl d Ar debuglevel
+Don't detach from the console and run as a daemon. In addition the 
+.Ar debuglevel
+argument specifies what level of error messages to display. 0 being 
+the least, 4 the most.
+.It Fl m Ar mibdir
+The directory in which to look for MIB files. The default directory is 
+usually sufficient.
+.It Fl M
+Display MIB parsing warnings.
+.It Fl p Ar pidfile
+Specifies a location for the a process id file to be written to. This file 
+contains the process id of 
+.Nm 
+and can be used to stop the daemon.
+.It Fl r Ar retries
+The number of times to retry sending an SNMP packet. Defaults to 3 retries.
+.It Fl t Ar timeout
+The amount of time (in seconds) to wait for an SNMP response. Defaults to 
+5 seconds.
+.It Fl V
+Prints the version of
+.Nm
+and the locations of the configuration files, RRD files etc.
+.It Fl w Ar workdir
+The default directory where to look for RRD files. See below for info on 
+the various file locations.
+.El
+.Sh FILE LOCATIONS
+To determine the default location for the configuration files and RRD files 
+run this command:
+.Bd -literal -offset indent
+# rrdbotd -V 
+.Ed
+.Pp
+The configuration files for SNMP pollers are laid out in a directory tree, 
+with one file per RRD. Subdirectories can be used to organize the 
+configuration files. The contents of the configuration files are described 
+in 
+.Xr rrdbot.conf 5 .
+.Pp
+By default the RRD files mirror the directory structure and names of the 
+configuration files, with an 
+.Pa .rrd
+extension appended to the filename.
+.Pp
+For example if your configuration files are in a structure like the following:
+.Bd -literal -offset indent
+/usr/local/etc/rrdbot/
+  gateways/
+    gateway-load.conf
+    gateway-traffic.conf
+  temperature/
+    inside-temperature.conf
+    outside-temperature.conf
+  machine-load.conf  
+.Ed
+.Pp
+Then the default RRD files would be in a similar directory structure:
+.Bd -literal -offset indent
+/var/db/rrdbot/
+  gateways/
+    gateway-load.conf.rrd
+    gateway-traffic.conf.rrd
+  temperature/
+    inside-temperature.conf.rrd
+    outside-temperature.conf.rrd
+  machine-load.conf.rrd
+.Ed
+.Pp
+The default location for an RRD file can be overridden by using the 
+.Ar rrd
+option in the configuration file.
+.Pp
+You can use the 
+.Xr rrdbot-create 8
+tool to create the needed RRD files in the appropriate places. 
+.Sh SEE ALSO
+.Xr rrdbot.conf 5 ,
+.Xr rrdbot-create 8 ,
+.Xr rrdbot-get 1 ,
+.Xr rrdtool 1
+.Sh AUTHOR
+.An Nate Nielsen Aq nielsen@memberwebs.com

@@ -1,0 +1,84 @@
+.\" 
+.\" Copyright (c) 2006, Nate Nielsen
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without 
+.\" modification, are permitted provided that the following conditions 
+.\" are met:
+.\" 
+.\"     * Redistributions of source code must retain the above 
+.\"       copyright notice, this list of conditions and the 
+.\"       following disclaimer.
+.\"     * Redistributions in binary form must reproduce the 
+.\"       above copyright notice, this list of conditions and 
+.\"       the following disclaimer in the documentation and/or 
+.\"       other materials provided with the distribution.
+.\"     * The names of contributors to this software may not be 
+.\"       used to endorse or promote products derived from this 
+.\"       software without specific prior written permission.
+.\" 
+.\" THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+.\" "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+.\" LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS 
+.\" FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE 
+.\" COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, 
+.\" INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
+.\" BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS 
+.\" OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
+.\" AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
+.\" OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF 
+.\" THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH 
+.\" DAMAGE.
+.\" 
+.\"
+.\" CONTRIBUTORS
+.\"  Nate Nielsen <nielsen@memberwebs.com>
+.\"
+.Dd August, 2006
+.Dt rrdbot-get 1
+.Os rrdbot 
+.Sh NAME
+.Nm rddbot-get
+.Nd retrieves an SNMP value from an SNMP uri
+.Sh SYNOPSIS
+.Nm
+.Op Fl Mnr
+.Op Fl m Ar mibdir
+.Op Fl t Ar timeout
+.Ar snmp://community@host/oid
+.Nm 
+.Fl V
+.Sh DESCRIPTION
+.Nm
+retrieves an SNMP value from an SNMP URI. The format is the same as is used by 
+.Xr rrdbotd 8 .
+You can use 
+.Nm 
+for testing SNMP polling while configuring 
+.Xr rrdbotd 8 .
+.Sh OPTIONS
+The options are as follows. 
+.Bl -tag -width Fl
+.It Fl m Ar mibdir
+The directory in which to look for MIB files. The default directory is 
+usually sufficient.
+.It Fl M
+Display MIB parsing warnings.
+.It Fl n 
+Display numeric OIDs.
+.It Fl r
+Recursively walk the SNMP values under the given OID.
+.It Fl t Ar timeout
+The amount of time (in seconds) to wait for an SNMP response. Defaults to 
+5 seconds.
+.It Fl V
+Prints the version of
+.Nm
+and the locations of the configuration files, RRD files etc.
+.El
+.Sh SEE ALSO
+.Xr rrdbotd 8 ,
+.Xr rrdbot.conf 5 ,
+.Xr rrdbot-create 8
+.Sh AUTHOR
+.An Nate Nielsen Aq nielsen@memberwebs.com
