@@ -109,6 +109,7 @@ typedef struct _resolve_request
 {
     char hostname[256];
     char servname[256];
+    struct addrinfo hints;
     async_resolve_callback cb;
     void *arg;
 
@@ -164,7 +165,7 @@ resolver_thread(void* arg)
 
         /* The actual resolve */
         req->gaierr = getaddrinfo(req->hostname, req->servname[0] ? req->servname : NULL,
-                                 NULL, &req->ai);
+                                  &req->hints, &req->ai);
         req->errn = errno;
 
         /* A timeout */
@@ -255,7 +256,7 @@ async_resolver_init()
 
 void
 async_resolver_queue(const char* hostname, const char* servname,
-                     async_resolve_callback cb, void* arg)
+                     struct addrinfo* hints, async_resolve_callback cb, void* arg)
 {
     resolve_request* req;
     resolve_request* r;
@@ -286,6 +287,9 @@ async_resolver_queue(const char* hostname, const char* servname,
     if(servname && !req->servname[0])
         strncpy(req->servname, servname, sizeof(req->servname));
     req->servname[sizeof(req->servname) - 1] = 0;
+
+    if(hints)
+        memcpy(&(req->hints), hints, sizeof(req->hints));
 
     /* Append the result to requests */
     pthread_mutex_lock(&res_mutex);

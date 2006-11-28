@@ -637,6 +637,7 @@ static int
 resolve_timer(mstime when, void* arg)
 {
     rb_host* host;
+    struct addrinfo hints;
 
     /* Go through hosts and see which ones need resolving */
     for(host = g_state.hosts; host; host = host->next)
@@ -647,9 +648,13 @@ resolve_timer(mstime when, void* arg)
 
         if(when - host->resolve_interval > host->last_resolve_try)
         {
+            memset(&hints, 0, sizeof(hints));
+            hints.ai_family = PF_UNSPEC;
+            hints.ai_socktype = SOCK_DGRAM;
+
             /* Automatically strips port number */
             rb_messagex(LOG_DEBUG, "resolving host: %s", host->hostname);
-            async_resolver_queue(host->hostname, "161", resolve_cb, host);
+            async_resolver_queue(host->hostname, "161", &hints, resolve_cb, host);
             host->last_resolve_try = when;
         }
 

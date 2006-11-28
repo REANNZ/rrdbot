@@ -42,7 +42,7 @@ int  async_resolver_init();
 void async_resolver_uninit();
 
 void async_resolver_queue(const char* hostname, const char* servname,
-                          async_resolve_callback cb, void* arg);
+                          struct addrinfo* hints, async_resolve_callback cb, void* arg);
 
 
 #endif /* __ASYNC_RESOLVER_H__ */
