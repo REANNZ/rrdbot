@@ -229,14 +229,9 @@ parse_item(const char* field, char* uri, config_ctx *ctx)
     ASSERT(host && path);
 
     /* Currently we only support SNMP pollers */
-    if(strcmp(scheme, CONFIG_SNMP) == 0)
-        version = SNMP_V1;
-    else if(strcmp(scheme, CONFIG_SNMP2) == 0)
-        version = SNMP_V2c;
-    else if(strcmp(scheme, CONFIG_SNMP2C) == 0)
-        version = SNMP_V2c;
-    else
-        errx(2, "%s: invalid poll scheme: %s", ctx->confname, scheme);
+    msg = cfg_parse_scheme(scheme, &version);
+    if(msg)
+        errx(2, "%s: %s", msg, scheme);
 
     /*
      * Build a lookup key. We can only combine requests for the same

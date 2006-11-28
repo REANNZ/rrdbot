@@ -42,6 +42,9 @@
 #include <stdarg.h>
 #include <dirent.h>
 
+#include <bsnmp/asn1.h>
+#include <bsnmp/snmp.h>
+
 #include "config-parser.h"
 
 static void
@@ -364,3 +367,24 @@ cfg_parse_uri (char *uri, char** scheme, char** host, char** user, char** path)
 
     return NULL;
 }
+
+#define CONFIG_SNMP "snmp"
+#define CONFIG_SNMP2 "snmp2"
+#define CONFIG_SNMP2C "snmp2c"
+
+/* Parsing snmp, snmp2 snmp2c etc... */
+const char*
+cfg_parse_scheme(const char *str, enum snmp_version *scheme)
+{
+    /* Currently we only support SNMP pollers */
+    if(strcmp(str, CONFIG_SNMP) == 0)
+        *scheme = SNMP_V1;
+    else if(strcmp(str, CONFIG_SNMP2) == 0)
+        *scheme = SNMP_V2c;
+    else if(strcmp(str, CONFIG_SNMP2C) == 0)
+        *scheme = SNMP_V2c;
+    else
+        return "invalid scheme";
+    return NULL;
+}
+

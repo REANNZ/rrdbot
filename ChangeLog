@@ -1,3 +1,6 @@
+0.5
+    - Added SNMP version 2c support for rrdbot-get [Stoned Elipot]
+    
 0.4
     - Reduced memory usage of SNMP requests
     - Added asynchronous DNS resolver
@@ -6,4 +9,3 @@
     
 0.3
     - Initial public release
-

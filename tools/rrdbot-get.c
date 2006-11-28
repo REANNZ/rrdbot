@@ -121,6 +121,7 @@ send_req()
 static void
 setup_req(char* uri)
 {
+    enum snmp_version version;
     const char* msg;
     char* scheme;
     char* copy;
@@ -137,15 +138,16 @@ setup_req(char* uri)
     ASSERT(ctx.hostname && path);
 
     /* Currently we only support SNMP pollers */
-    if(strcmp(scheme, "snmp") != 0)
-        errx(2, "invalid scheme: %s", scheme);
+    msg = cfg_parse_scheme(scheme, &version);
+    if(msg)
+        errx(2, "%s: %s", msg, scheme);
 
     if(sock_any_pton(ctx.hostname, &ctx.hostaddr,
                      SANY_OPT_DEFPORT(161) | SANY_OPT_DEFLOCAL) == -1)
         err(1, "couldn't resolve host address (ignoring): %s", ctx.hostname);
 
     memset(&ctx.pdu, 0, sizeof(ctx.pdu));
-    ctx.pdu.version = 1;
+    ctx.pdu.version = version;
     ctx.pdu.request_id = 0;
     ctx.pdu.type = ctx.recursive ? SNMP_PDU_GETNEXT : SNMP_PDU_GET;
     ctx.pdu.error_status = 0;
