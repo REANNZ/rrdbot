@@ -9,4 +9,6 @@ html:
 	perl man2html.pl rrdbot-get.1 > rrdbot-get.1.html
 
 EXTRA_DIST = $(man_MANS) \
-    man2html.pl
+    man2html.pl \
+    traffic-example.conf
+
