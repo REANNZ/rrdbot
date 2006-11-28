@@ -1,5 +1,6 @@
 0.5
     - Added SNMP version 2c support for rrdbot-get [Stoned Elipot]
+    - Fixed asynchronous resolving on FreeBSD
     
 0.4
     - Reduced memory usage of SNMP requests
