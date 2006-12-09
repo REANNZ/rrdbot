@@ -839,7 +839,7 @@ main(int argc, char* argv[])
 
         /* Config directory */
         case 'c':
-            confdir = DEFAULT_CONFIG;
+            confdir = optarg;
             break;
 
         /* Only print commands */
