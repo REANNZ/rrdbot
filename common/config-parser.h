@@ -38,6 +38,9 @@
 #ifndef __CONFIG_PARSER_H__
 #define __CONFIG_PARSER_H__
 
+#include <bsnmp/asn1.h>
+#include <bsnmp/snmp.h>
+
 /* Callbacks must be defined by the caller */
 extern int cfg_value(const char* filename, const char* header, const char* name,
                      char* value, void* data);
