@@ -205,6 +205,16 @@ writepid(const char* pidfile)
     fclose(f);
 }
 
+static void
+removepid(const char* pidfile)
+{
+    if(unlink(pidfile) < 0)
+    {
+        if(errno != ENOENT)
+            rb_message(LOG_WARNING, "couldn't remove pid file: %s", pidfile);
+    }
+}
+
 int
 main(int argc, char* argv[])
 {
@@ -352,6 +362,9 @@ main(int argc, char* argv[])
     rb_config_free();
     async_resolver_uninit();
     server_uninit();
+
+    if(pidfile != NULL)
+        removepid(pidfile);
 
     return 0;
 }
