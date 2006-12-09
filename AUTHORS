@@ -1,4 +1,11 @@
 Nate Nielsen <nielsen@memberwebs.com>
 
-SNMP Engine: Harti Brandt <harti@freebsd.org>
-MIB Parser: Carnegie Mellon University
+CONTRIBUTIONS
+  Stoned Elipot <seb@ssr.univ-paris7.fr>
+  benj <benj@divingislife.net>
+
+SNMP ENGINE
+  Harti Brandt <harti@freebsd.org>
+
+MIB PARSER
+  Carnegie Mellon University
