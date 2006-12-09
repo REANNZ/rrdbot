@@ -243,7 +243,7 @@ parse_dir_internal(const char* subdir, void* data)
 {
     char path[MAXPATHLEN];
     struct dirent* dire;
-    struct stat buf;
+    struct stat st;
     char* memory;
     DIR* dir;
     int r;
@@ -272,15 +272,15 @@ parse_dir_internal(const char* subdir, void* data)
         /* for non BSD compliant filesystem: stat() only if dirent->d_type is unknown */
         if(dire->d_type == DT_UNKNOWN)
         {
-            if(stat(path, &buf) < 0)
+            if(stat(path, &st) < 0)
             {
-                errmsg(NULL, data, "couldn't stat directory: %s", path);
+                errmsg(NULL, data, "couldn't stat path: %s", path);
                 return -1;
             }
 
-            if(S_ISREG(buf.st_mode))
+            if(S_ISREG(st.st_mode))
                 dire->d_type = DT_REG;
-            else if(S_ISDIR(buf.st_mode))
+            else if(S_ISDIR(st.st_mode))
                 dire->d_type = DT_DIR;
             else
                 continue;
