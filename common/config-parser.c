@@ -41,6 +41,7 @@
 #include <syslog.h>
 #include <stdarg.h>
 #include <dirent.h>
+#include <sys/stat.h>
 
 #include <bsnmp/asn1.h>
 #include <bsnmp/snmp.h>
@@ -242,6 +243,7 @@ parse_dir_internal(const char* subdir, void* data)
 {
     char path[MAXPATHLEN];
     struct dirent* dire;
+    struct stat buf;
     char* memory;
     DIR* dir;
     int r;
@@ -266,6 +268,23 @@ parse_dir_internal(const char* subdir, void* data)
         }
         else
             strlcpy(path, dire->d_name, MAXPATHLEN);
+
+        /* for non BSD compliant filesystem: stat() only if dirent->d_type is unknown */
+        if(dire->d_type == DT_UNKNOWN)
+        {
+            if(stat(path, &buf) < 0)
+            {
+                errmsg(NULL, data, "couldn't stat directory: %s", path);
+                return -1;
+            }
+
+            if(S_ISREG(buf.st_mode))
+                dire->d_type = DT_REG;
+            else if(S_ISDIR(buf.st_mode))
+                dire->d_type = DT_DIR;
+            else
+                continue;
+        }
 
         /* Descend into each sub directory */
         if(dire->d_type == DT_DIR)

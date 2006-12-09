@@ -3,6 +3,7 @@
     - Fixed asynchronous resolving on FreeBSD
     - Fix bug where rrdbot-create ignored '-c' argument [benj]
     - Remove pid file when exiting [benj]
+	- Fix bug where config files are not enumerated on reiserfs [benj]
 
 0.4
     - Reduced memory usage of SNMP requests
