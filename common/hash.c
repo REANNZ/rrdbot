@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004, Nate Nielsen
+ * Copyright (c) 2004, Stefan Walter
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,7 @@
 
 /*
  * Originally from apache 2.0
- * Modifications for general use by <nielsen@memberwebs.com>
+ * Modifications for general use by <stef@memberwebs.com>
  */
 
 /* Copyright 2000-2004 The Apache Software Foundation

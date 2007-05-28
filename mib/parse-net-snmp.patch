@@ -2,7 +2,7 @@
 +++ parse.c	2006-04-04 16:04:46.000000000
 @@ -1,4 +1,11 @@
  /*
-+ * Nate Nielsen
++ * Stef Walter
 + * 
 + * Borrowed from net-snmp. Cleaned up a bit (see parse-net-snmp.patch)
 + * and readied for inclusion in rrdbot. Most of the additional code

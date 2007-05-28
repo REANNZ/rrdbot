@@ -126,7 +126,7 @@ sub man {
     }
     close(MAN);
 
-    print "<H6>Copyright, N. Nielsen&nbsp;&nbsp;&nbsp;[ <a href='./'>back</a> | <a href='../../'>home</a> ]</h6>";
+    print "<H6>&nbsp;&nbsp;&nbsp;[ <a href='./'>back</a> | <a href='../../'>home</a> ]</h6>";
     print "</BODY>\n";
     print "</HTML>\n";
 
@@ -192,7 +192,7 @@ sub html_header {
 <link rev="made" href="mailto:wosch\@FreeBSD.ORG">
 <META name="robots" content="nofollow">
 <meta content="text/html; charset=iso-8859-1" http-equiv="Content-Type">
-<link rel="stylesheet" type="text/css" href="/nielsen/style.css">
+<link rel="stylesheet" type="text/css" href="/swalter/style.css">
 </HEAD>
 <BODY BGCOLOR="#FFFFFF" TEXT="#000000">\n\n};
 }

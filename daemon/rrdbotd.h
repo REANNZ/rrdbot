@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004, Nate Nielsen
+ * Copyright (c) 2004, Stef Walter
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,7 @@
  *
  *
  * CONTRIBUTORS
- *  Nate Nielsen <nielsen@memberwebs.com>
+ *  Stef Walter <stef@memberwebs.com>
  *
  */
 

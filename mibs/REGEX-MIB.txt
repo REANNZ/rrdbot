@@ -10,8 +10,8 @@ IMPORTS
 
 regexData MODULE-IDENTITY
     LAST-UPDATED "200603290000Z"
-    ORGANIZATION "Nate Nielsen"
-    CONTACT-INFO "nielsen@memberwesb.com"
+    ORGANIZATION "Stefan Walter"
+    CONTACT-INFO "stef@memberwesb.com"
     DESCRIPTION "The MIB for the bsnmp-regex."
 
     ::= { begemot 203 }

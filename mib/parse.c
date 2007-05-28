@@ -1,5 +1,5 @@
 /*
- * Nate Nielsen
+ * Stef Walter
  *
  * Borrowed from net-snmp. Cleaned up a bit (see parse-net-snmp.patch)
  * and readied for inclusion in rrdbot. Most of the additional code

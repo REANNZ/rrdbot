@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, Nate Nielsen
+ * Copyright (c) 2006, Stefan Walter
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@
  * THREAD COMMUNICATION
  */
 
-#define TSIGNAL_UNITITIALIZED  { -1 -1 }
+#define TSIGNAL_UNITITIALIZED  { -1, -1 }
 
 static int
 tsignal_init(int* sig)
@@ -261,6 +261,14 @@ async_resolver_queue(const char* hostname, const char* servname,
     resolve_request* req;
     resolve_request* r;
     char* t;
+
+    if(!res_thread)
+    {
+        /* All errors go to callback */
+        errno = ESRCH;
+        (cb)(EAI_SYSTEM, NULL, arg);
+        return;
+    }
 
     req = calloc(1, sizeof(resolve_request));
     if(!req)

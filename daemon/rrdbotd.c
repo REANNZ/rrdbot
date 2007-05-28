@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, Nate Nielsen
+ * Copyright (c) 2005, Stefan Walter
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,7 @@
  *
  *
  * CONTRIBUTORS
- *  Nate Nielsen <nielsen@memberwebs.com>
+ *  Stef Walter <stef@memberwebs.com>
  *
  */
 
@@ -312,10 +312,6 @@ main(int argc, char* argv[])
     /* The mainloop server */
     server_init();
 
-    /* Setup the Async DNS resolver */
-    if(async_resolver_init() < 0)
-        err(1, "couldn't initialize resolver");
-
     /* Parse config and setup SNMP system */
     rb_config_parse();
 
@@ -333,6 +329,13 @@ main(int argc, char* argv[])
 
         rb_messagex(LOG_DEBUG, "running as a daemon");
         daemonized = 1;
+    }
+
+    /* Setup the Async DNS resolver */
+    if(async_resolver_init() < 0)
+    {
+        rb_message(LOG_ERR, "couldn't initialize resolver");
+        /* Allow things to proceed without resolver */
     }
 
     /* Handle signals */
