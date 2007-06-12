@@ -94,6 +94,7 @@ static uint nrequests = 0;
 static rb_request*
 new_req()
 {
+    rb_request* arequests;
     rb_request* req = NULL;
     uint num;
     int i, overlap = 0;
@@ -101,8 +102,7 @@ new_req()
     if(nrequests)
     {
         /* We allocate in a loop starting after the last allocation. */
-        for(i = (reqhigh + 1) % nrequests; i != reqhigh;
-            i = (i + 1) % nrequests)
+        for(i = reqhigh; !overlap || i != reqhigh; i = (i + 1) % nrequests)
         {
             /*
              * We can overlap past reqlow, but in that case no
@@ -134,8 +134,8 @@ new_req()
         /* Reallocate the request block */
         /* TODO: Once we use less memory this can be higher */
         num = nrequests ? nrequests * 2 : 32;
-        requests = (rb_request*)realloc(requests, sizeof(rb_request) * num);
-        if(!requests)
+        arequests = (rb_request*)realloc(requests, sizeof(rb_request) * num);
+        if(!arequests)
         {
             /* Note we leave old requests allocated */
             errno = ENOMEM;
@@ -143,6 +143,7 @@ new_req()
         }
 
         /* Clear out the new ones */
+	requests = arequests;
         memset(requests + nrequests, 0, sizeof(rb_request) * (num - nrequests));
 
         /* We return the next one */

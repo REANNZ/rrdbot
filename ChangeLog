@@ -1,3 +1,6 @@
+0.8 
+    - Fix assertion when reallocating SNMP request memory
+
 0.7
     - Use my real name 'Stef Walter'
       See: http://memberwebs.com/nielsen/
