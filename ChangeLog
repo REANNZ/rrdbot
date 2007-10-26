@@ -1,4 +1,4 @@
-0.8 
+0.8  [2007-07-16]
     - Fix assertion when reallocating SNMP request memory
 
 0.7
