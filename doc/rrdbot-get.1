@@ -76,6 +76,34 @@ Prints the version of
 .Nm
 and the locations of the configuration files, RRD files etc.
 .El
+.Sh MULTIPLE AGENTS
+.Nm
+supports failover between multiple agents. If an SNMP query fails on one agent
+or a value is not found when querying an agent, then it will switch to another
+configured agent. 
+.Pp
+When combined with a query (see TABLE QUERIES) you can use this feature to 
+search for a given value in a table on one of multiple agents.
+.Pp
+To use failover, simply use multiple host names with commas (without a space)
+separating them. For example:
+.Bd -literal -offset indent
+snmp://public@two.example.com,one.example.com/sysUptime.0
+.Ed
+.Sh TABLE QUERIES
+.Nm 
+can query a value that corresponds to a certain row in an SNMP table. On 
+many SNMP agents the indexes of rows in tables are not fixed, and this 
+allows you to retrieve a certain value no matter what row of the table 
+it is on.
+.Pp
+Add the OID and value you want to search for in the table to the end 
+of the SNMP URL. Only one query value is supported. 
+.Pp
+For example to get the outbound packet count on the 'eth0' interface, you would use:
+.Bd -literal -offset indent
+snmp://public@example.com/ifInUcastPkts?ifDescr=eth0
+.Ed
 .Sh SEE ALSO
 .Xr rrdbotd 8 ,
 .Xr rrdbot.conf 5 ,

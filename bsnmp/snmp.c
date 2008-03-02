@@ -408,7 +408,7 @@ snmp_pdu_decode(struct asn_buf *b, struct snmp_pdu *pdu, int32_t *ip)
 
 	  case ASN_ERR_FAILED:
 	  case ASN_ERR_EOBUF:
-		snmp_pdu_free(pdu);
+		snmp_pdu_clear(pdu);
 		return (SNMP_CODE_FAILED);
 
 	  case ASN_ERR_BADLEN:
@@ -805,7 +805,7 @@ snmp_pdu_dump(const struct snmp_pdu *pdu)
 }
 
 void
-snmp_value_free(struct snmp_value *value)
+snmp_value_clear(struct snmp_value *value)
 {
 	if (value->syntax == SNMP_SYNTAX_OCTETSTRING)
 		free(value->v.octetstring.octets);
@@ -834,12 +834,58 @@ snmp_value_copy(struct snmp_value *to, const struct snmp_value *from)
 }
 
 void
-snmp_pdu_free(struct snmp_pdu *pdu)
+snmp_pdu_clear(struct snmp_pdu *pdu)
 {
 	u_int i;
 
 	for (i = 0; i < pdu->nbindings; i++)
-		snmp_value_free(&pdu->bindings[i]);
+		snmp_value_clear(&pdu->bindings[i]);
+}
+
+int
+snmp_value_equal(const struct snmp_value *a, const struct snmp_value *b)
+{
+	if (asn_compare_oid (&a->var, &b->var) == 0)
+		return 0;
+	if (a->syntax != b->syntax)
+		return 0;
+
+	switch (a->syntax) {
+	case SNMP_SYNTAX_NULL:
+	case SNMP_SYNTAX_NOSUCHOBJECT:
+	case SNMP_SYNTAX_NOSUCHINSTANCE:
+	case SNMP_SYNTAX_ENDOFMIBVIEW:
+		return 1;
+
+	case SNMP_SYNTAX_INTEGER:
+		return a->v.integer == b->v.integer;
+
+	case SNMP_SYNTAX_OCTETSTRING:
+		if (a->v.octetstring.len != b->v.octetstring.len)
+			return 0;
+		return memcmp (a->v.octetstring.octets, b->v.octetstring.octets,
+		               a->v.octetstring.len) == 0;
+
+	case SNMP_SYNTAX_OID:
+		if (a->v.oid.len != b->v.oid.len)
+			return 0;
+		return memcmp (&a->v.oid.subs, &b->v.oid.subs,
+		               (b->v.oid.len * sizeof (b->v.oid.subs[0]))) == 0;
+
+	case SNMP_SYNTAX_IPADDRESS:
+		return memcmp (&a->v.ipaddress, &b->v.ipaddress, sizeof (a->v.ipaddress));
+
+	case SNMP_SYNTAX_COUNTER:
+	case SNMP_SYNTAX_GAUGE:
+	case SNMP_SYNTAX_TIMETICKS:
+		return a->v.uint32 == b->v.uint32;
+
+	case SNMP_SYNTAX_COUNTER64:
+		return a->v.counter64 == b->v.counter64;
+
+	default:
+		return 0;
+	};
 }
 
 /*

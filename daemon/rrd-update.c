@@ -45,6 +45,7 @@
 
 #include <rrd.h>
 
+#include "log.h"
 #include "rrdbotd.h"
 
 #define MAX_NUMLEN 40
@@ -66,7 +67,7 @@ void rb_rrd_update(rb_poller *poll)
 
     for(it = poll->items; it; it = it->next)
     {
-        tlen += strlen(it->rrdfield) + 1;
+        tlen += strlen(it->field) + 1;
         ilen += 40;
     }
 
@@ -79,7 +80,7 @@ void rb_rrd_update(rb_poller *poll)
             free(items);
         if(template)
             free(template);
-        rb_messagex(LOG_CRIT, "out of memory");
+        log_errorx ("out of memory");
         return;
     }
 
@@ -95,7 +96,7 @@ void rb_rrd_update(rb_poller *poll)
             strlcat(items, ":", ilen);
         }
 
-        strlcat(template, it->rrdfield, tlen);
+        strlcat(template, it->field, tlen);
 
         if(it->vtype == VALUE_UNSET)
             strlcat(items, "U", ilen);
@@ -120,15 +121,15 @@ void rb_rrd_update(rb_poller *poll)
     argv[3] = template;
     argv[4] = items;
 
-    rb_messagex(LOG_DEBUG, "updating RRD file: %s", poll->rrdname);
-    rb_messagex(LOG_DEBUG, "> template: %s", template);
-    rb_messagex(LOG_DEBUG, "> values: %s", items);
+    log_debug ("updating RRD file: %s", poll->rrdname);
+    log_debug ("> template: %s", template);
+    log_debug ("> values: %s", items);
 
     rrd_clear_error();
     r = rrd_update(5, (char**)argv);
 
     if(r != 0)
-        rb_messagex(LOG_ERR, "couldn't update rrd file: %s: %s",
+        log_errorx ("couldn't update rrd file: %s: %s",
                     poll->rrdname, rrd_get_error());
 
     free(template);

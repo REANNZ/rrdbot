@@ -1,6 +1,6 @@
 
-EXTRA_DIST = common mib acsite.m4
-SUBDIRS = bsnmp daemon tools mibs doc
+EXTRA_DIST = mib acsite.m4
+SUBDIRS = bsnmp common daemon tools mibs doc
 
 # Clean up any EXTRA_DIST we're distributing
 dist-hook:

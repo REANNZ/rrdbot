@@ -143,6 +143,11 @@ hsh_index_t* hsh_next(hsh_index_t* hi);
 void* hsh_this(hsh_index_t* hi, const void** key, size_t* klen);
 
 /*
+ * hsh_clear: Clear all values from has htable.
+ */
+void hsh_clear(hsh_t* ht);
+
+/*
  * This can be passed as 'klen' in any of the above functions to indicate
  * a string-valued key, and have hash compute the length automatically.
  */

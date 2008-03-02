@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, Stefan Walter
+ * Copyright (c) 2008, Stefan Walter
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,34 +32,27 @@
  *
  *
  * CONTRIBUTORS
- *  Stefan Walter <stef@memberwebs.com>
+ *  Stef Walter <stef@memberwebs.com>
+ *
  */
 
-#ifndef __CONFIG_PARSER_H__
-#define __CONFIG_PARSER_H__
+#ifndef LOG_H_
+#define LOG_H_
 
-#include <bsnmp/asn1.h>
-#include <bsnmp/snmp.h>
+#include <stdarg.h>
 
-/* Callbacks must be defined by the caller */
-extern int cfg_value(const char* filename, const char* header, const char* name,
-                     char* value, void* data);
-extern int cfg_error(const char* filename, const char* errmsg, void* data);
+void log_error  (const char *msg, ...);
 
-/* Calling these will call the callbacks above */
-int cfg_parse_dir(const char* dirname, void* data);
-int cfg_parse_file(const char* filename, void* data, char** memory);
+void log_errorx (const char *msg, ...);
 
-/* A helper for parsing URIs */
-const char* cfg_parse_uri (char *uri, char** scheme, char** host, char** user, char** path, char** query);
+void log_warn   (const char *msg, ...);
 
-/* Parsing snmp, snmp2 snmp2c etc... */
-const char* cfg_parse_scheme (const char *input, enum snmp_version *scheme);
+void log_warnx  (const char *msg, ...);
 
-/* Parse query=xxxx arguments */
-const char* cfg_parse_query (char *query, char **name, char **value, char **remainder);
+void log_debug  (const char *msg, ...);
 
-/* A helper for URL decoding URI values */
-const char* cfg_parse_url_decode (char *value);
+void log_info   (const char *msg, ...);
 
-#endif /* __CONFIG_PARSER_H__ */
+void log_vmessage (int level, int erno, const char *msg, va_list va);
+
+#endif /*LOG_H_*/

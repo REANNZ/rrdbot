@@ -54,6 +54,7 @@ AC_MSG_RESULT()
 
 AC_CONFIG_FILES([Makefile
     mibs/Makefile
+    common/Makefile
     daemon/Makefile
     bsnmp/Makefile
     tools/Makefile

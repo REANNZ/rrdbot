@@ -1,3 +1,8 @@
+0.9 ?????
+    - Support failover between multiple agents
+    - Support table queries
+    - Major refactoring of internals. 
+    
 0.8  [2007-07-16]
     - Fix assertion when reallocating SNMP request memory
 

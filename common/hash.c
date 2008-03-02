@@ -374,6 +374,25 @@ void* hsh_rem(hsh_t* ht, const void* key, size_t klen)
     return val;
 }
 
+void hsh_clear(hsh_t* ht)
+{
+	hsh_entry_t *he, *next;
+	int i;
+
+	/* Free all entries in the array */
+	for (i = 0; i < ht->max; ++i) {
+		he = ht->array[i];
+		while (he) {
+			next = he->next;
+			free (he);
+			he = next;
+		}
+	}
+
+	memset (ht->array, 0, ht->max * sizeof (hsh_entry_t*));
+	ht->count = 0;
+}
+
 unsigned int hsh_count(hsh_t* ht)
 {
     return ht->count;

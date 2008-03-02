@@ -56,7 +56,14 @@
 .Nm
 is an SNMP polling daemon which writes the polled values to an 
 .Xr rrdtool 1
-RRD database. An can poll many different SNMP sources in an efficient manner. 
+RRD database. An can poll many different SNMP sources in an efficient manner.  
+.Pp
+Table queries are supported, where the OID index of a certain value is not 
+known beforehand, or may change regularly. 
+.Pp
+In addition multiple SNMP agents may be specified for a certain value. If 
+one SNMP agent cannot be contacted or errors for some reason, another one 
+will be tried.
 .Pp
 The configuration (eg: SNMP sources, polling intervals) are located in files 
 in a directory, with one configuration file per RRD. The format of the 

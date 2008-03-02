@@ -37,6 +37,13 @@
  */
 
 #include "usuals.h"
+
+#include "async-resolver.h"
+#include "log.h"
+#include "rrdbotd.h"
+#include "server-mainloop.h"
+#include "snmp-engine.h"
+
 #include <errno.h>
 #include <unistd.h>
 #include <stdarg.h>
@@ -48,9 +55,6 @@
 #include <bsnmp/snmp.h>
 #include <mib/mib-parser.h>
 
-#include "rrdbotd.h"
-#include "server-mainloop.h"
-#include "async-resolver.h"
 
 /* The default command line options */
 #define DEFAULT_CONFIG      CONF_PREFIX "/rrdbot"
@@ -105,11 +109,10 @@ test(int argc, char* argv[])
  */
 
 void
-rb_vmessage(int level, int err, const char* msg, va_list ap)
+log_vmessage(int level, int erno, const char* msg, va_list ap)
 {
     #define MAX_MSGLEN  1024
     char buf[MAX_MSGLEN];
-    int e = errno;
 
     if(daemonized) {
         if (level >= LOG_DEBUG)
@@ -125,10 +128,10 @@ rb_vmessage(int level, int err, const char* msg, va_list ap)
     strlcpy(buf, msg, MAX_MSGLEN);
     stretrim(buf);
 
-    if(err)
+    if(erno)
     {
         strlcat(buf, ": ", MAX_MSGLEN);
-        strncat(buf, strerror(e), MAX_MSGLEN);
+        strncat(buf, strerror(erno), MAX_MSGLEN);
     }
 
     /* As a precaution */
@@ -139,24 +142,6 @@ rb_vmessage(int level, int err, const char* msg, va_list ap)
         vsyslog(level, buf, ap);
     else
         vwarnx(buf, ap);
-}
-
-void
-rb_messagex(int level, const char* msg, ...)
-{
-    va_list ap;
-    va_start(ap, msg);
-    rb_vmessage(level, 0, msg, ap);
-    va_end(ap);
-}
-
-void
-rb_message(int level, const char* msg, ...)
-{
-    va_list ap;
-    va_start(ap, msg);
-    rb_vmessage(level, 1, msg, ap);
-    va_end(ap);
 }
 
 /* -----------------------------------------------------------------------------
@@ -195,13 +180,14 @@ writepid(const char* pidfile)
     FILE* f = fopen(pidfile, "w");
     if(f == NULL)
     {
-        rb_message(LOG_WARNING, "couldn't open pid file: %s", pidfile);
+        log_warn("couldn't open pid file: %s", pidfile);
         return;
     }
 
     fprintf(f, "%d\n", (int)getpid());
     if(ferror(f))
-        rb_message(LOG_WARNING, "couldn't write to pid file: %s", pidfile);
+        log_warn("couldn't write to pid file: %s", pidfile);
+
     fclose(f);
 }
 
@@ -211,7 +197,7 @@ removepid(const char* pidfile)
     if(unlink(pidfile) < 0)
     {
         if(errno != ENOENT)
-            rb_message(LOG_WARNING, "couldn't remove pid file: %s", pidfile);
+            log_warn("couldn't remove pid file: %s", pidfile);
     }
 }
 
@@ -319,7 +305,8 @@ main(int argc, char* argv[])
     mib_uninit();
 
     /* Rev up the main engine */
-    rb_snmp_engine_init();
+    snmp_engine_init(3);
+    rb_poll_engine_init();
 
     if(daemonize)
     {
@@ -327,14 +314,14 @@ main(int argc, char* argv[])
         if(daemon(0, 0) == -1)
             err(1, "couldn't fork as a daemon");
 
-        rb_messagex(LOG_DEBUG, "running as a daemon");
+        log_debug("running as a daemon");
         daemonized = 1;
     }
 
     /* Setup the Async DNS resolver */
     if(async_resolver_init() < 0)
     {
-        rb_message(LOG_ERR, "couldn't initialize resolver");
+        log_error("couldn't initialize resolver");
         /* Allow things to proceed without resolver */
     }
 
@@ -352,16 +339,17 @@ main(int argc, char* argv[])
     if(pidfile != NULL)
         writepid(pidfile);
 
-    rb_messagex(LOG_INFO, "rrdbotd version " VERSION " started up");
+    log_info("rrdbotd version " VERSION " started up");
 
     /* Now let it go */
     if(server_run() == -1)
         err(1, "critical failure running SNMP engine");
 
-    rb_messagex(LOG_INFO, "rrdbotd stopping");
+    log_info("rrdbotd stopping");
 
     /* Cleanups */
-    rb_snmp_engine_uninit();
+    rb_poll_engine_uninit();
+    snmp_engine_stop();
     rb_config_free();
     async_resolver_uninit();
     server_uninit();

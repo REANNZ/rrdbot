@@ -138,7 +138,7 @@ add_timer(int ms, int oneshot, server_timer_callback callback, void* arg)
     struct timeval interval;
     timer_callback* cb;
 
-    ASSERT(ms > 0);
+    ASSERT (ms || oneshot);
     ASSERT(callback != NULL);
 
     interval.tv_sec = ms / 1000;

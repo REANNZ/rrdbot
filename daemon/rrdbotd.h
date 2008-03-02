@@ -55,8 +55,6 @@ typedef uint64_t mstime;
 
 struct _rb_item;
 struct _rb_poller;
-struct _rb_host;
-struct _rb_request;
 
 /*
  * Note that all the members are either in the config memory
@@ -65,9 +63,28 @@ struct _rb_request;
 
 typedef struct _rb_item
 {
-    /* Specific to this item */
-    const char* rrdfield;
-    struct snmp_value snmpfield;
+    /* The field name, RRD and display */
+    const char* field;
+
+    /* Connection information */
+    const char* community;
+    int version;
+
+    /* The oid that we are querying */
+    struct asn_oid field_oid;
+
+    /* Host names, with alternate hosts */
+    #define MAX_HOSTNAMES 16
+    const char* hostnames[MAX_HOSTNAMES];
+    int hostindex;
+    int n_hostnames;
+
+    /* Query related stuff */
+    int has_query;
+    struct asn_oid query_oid;
+    const char* query_match;
+    asn_subid_t query_last;
+    int query_value;
 
     /* The last value / current request */
     union
@@ -81,37 +98,16 @@ typedef struct _rb_item
     #define VALUE_FLOAT 2
     int vtype;
 
-    struct _rb_request* req;
+    /* A request in progress */
+    int request;
 
     /* Pointers to related */
-    const struct _rb_poller* poller;
-    const struct _rb_host* host;
+    struct _rb_poller* poller;
 
     /* Next in list of items */
     struct _rb_item* next;
 }
 rb_item;
-
-typedef struct _rb_host
-{
-    /* The hash key is version:hostname:community */
-    char key[128];
-
-    const char* hostname;
-    const char* community;
-    int version;
-
-    /* Host resolving and book keeping */
-    struct sockaddr_any address;
-    mstime resolve_interval;
-    mstime last_resolve_try;
-    mstime last_resolved;
-    int is_resolved;
-
-    /* Next in list of hosts */
-    struct _rb_host* next;
-}
-rb_host;
 
 typedef struct _rb_poller
 {
@@ -128,6 +124,7 @@ typedef struct _rb_poller
     rb_item* items;
 
     /* Book keeping */
+    mstime last_request;
     mstime last_polled;
 
     /* Next in list of pollers */
@@ -145,27 +142,14 @@ typedef struct _rb_state
 
     /* All the pollers/hosts */
     rb_poller* polls;
-    rb_host* hosts;
 
     /* Quick lookups for responses */
     hsh_t* poll_by_key;
-    hsh_t* host_by_key;
 }
 rb_state;
 
 /* One global rb_state with all the main settings */
 extern rb_state g_state;
-
-/* -----------------------------------------------------------------------------
- * UTILITIES (rrdbotd.c)
- */
-
-typedef void (*resolve_callback)(void *context, int unused, const char *name,
-                                 const unsigned char *addr, size_t addrlen);
-
-void rb_messagex(int level, const char* msg, ...);
-void rb_message(int level, const char* msg, ...);
-void rb_vmessage(int level, int err, const char* msg, va_list ap);
 
 /* -----------------------------------------------------------------------------
  * CONFIG (config.c)
@@ -178,8 +162,8 @@ void rb_config_free();
  * SNMP ENGINE (snmp-engine.c)
  */
 
-void rb_snmp_engine_init();
-void rb_snmp_engine_uninit();
+void rb_poll_engine_init();
+void rb_poll_engine_uninit();
 
 /* -----------------------------------------------------------------------------
  * RRD UPDATE CODE (rrd-update.c)

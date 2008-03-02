@@ -36,6 +36,10 @@
  */
 
 #include "usuals.h"
+
+#include "config-parser.h"
+
+#include <ctype.h>
 #include <errno.h>
 #include <unistd.h>
 #include <syslog.h>
@@ -45,8 +49,6 @@
 
 #include <bsnmp/asn1.h>
 #include <bsnmp/snmp.h>
-
-#include "config-parser.h"
 
 static void
 errmsg(const char* filename, void* data, const char* msg, ...)
@@ -346,7 +348,8 @@ cfg_parse_dir(const char* dirname, void* data)
 }
 
 const char*
-cfg_parse_uri (char *uri, char** scheme, char** host, char** user, char** path)
+cfg_parse_uri (char *uri, char** scheme, char** host, char** user,
+               char** path, char** query)
 {
     char* t;
 
@@ -354,6 +357,7 @@ cfg_parse_uri (char *uri, char** scheme, char** host, char** user, char** path)
     *host = NULL;
     *user = NULL;
     *path = NULL;
+    *query = NULL;
 
     *scheme = strsep(&uri, ":");
     if(uri == NULL || (uri[0] != '/' && uri[1] != '/'))
@@ -384,6 +388,13 @@ cfg_parse_uri (char *uri, char** scheme, char** host, char** user, char** path)
     while((*path)[0] == '/')
         (*path)++;
 
+    *query = strchr(*path, '?');
+    if(*query)
+    {
+        *(*query) = 0;
+        (*query)++;
+    }
+
     return NULL;
 }
 
@@ -407,3 +418,71 @@ cfg_parse_scheme(const char *str, enum snmp_version *scheme)
     return NULL;
 }
 
+const char*
+cfg_parse_query (char *query, char **name, char **value, char **remainder)
+{
+	const char *msg;
+	char *x;
+
+	*remainder = NULL;
+
+	if (*query == '&' || *query == '?')
+		query++;
+
+	/* Only use the first argument */
+	x = strchr (query, '&');
+	if (x) {
+		*x = 0;
+		*remainder = x + 1;
+	}
+
+	/* Parse into argument and value */
+	*value = strchr (query, '=');
+	if (*value) {
+		*(*value) = 0;
+		(*value)++;
+		msg = cfg_parse_url_decode (*value);
+		if (msg)
+			return msg;
+	}
+
+	*name = query;
+	return NULL;
+}
+
+const static char HEX_CHARS[] = "0123456789abcdef";
+
+const char*
+cfg_parse_url_decode (char *value)
+{
+	char *p, *a, *b;
+
+	/* Change all plusses to spaces */
+	for (p = strchr (value, '+'); p; p = strchr (p, '+'))
+		*p = ' ';
+
+	/* Now loop through looking for escapes */
+	p = value;
+	while (*value) {
+		/*
+		 * A percent sign followed by two hex digits means
+		 * that the digits represent an escaped character.
+		 */
+		if (*value == '%') {
+			value++;
+			a = strchr (HEX_CHARS, tolower(value[0]));
+			b = strchr (HEX_CHARS, tolower(value[1]));
+			if (a && b) {
+				*p = (a - HEX_CHARS) << 4;
+				*(p++) |= (b - HEX_CHARS);
+				value += 2;
+				continue;
+			}
+		}
+
+		*(p++) = *(value++);
+	}
+
+	*p = 0;
+	return NULL;
+}

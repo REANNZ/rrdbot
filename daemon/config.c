@@ -46,6 +46,7 @@
 
 #include <mib/mib-parser.h>
 
+#include "log.h"
 #include "rrdbotd.h"
 #include "config-parser.h"
 
@@ -85,48 +86,6 @@ config_ctx;
 /* -----------------------------------------------------------------------------
  * CONFIG LOADING
  */
-
-static rb_item*
-sort_items_by_host(rb_item *item)
-{
-    rb_item *sort = NULL;
-    rb_item *cur;
-    rb_item *it;
-
-    while(item)
-    {
-        cur = item;
-        item = item->next;
-        cur->next = NULL;
-
-        /* First item */
-        if(!sort)
-        {
-            sort = cur;
-            continue;
-        }
-
-        /* Before first item */
-        else if(cur->host <= sort->host)
-        {
-            cur->next = sort;
-            sort = cur;
-            continue;
-        }
-
-        for(it = sort; it->next; it = it->next)
-        {
-            if(cur->host <= sort->next->host)
-                break;
-        }
-
-        ASSERT(it);
-        cur->next = it->next;
-        it->next = cur;
-    }
-
-    return sort;
-}
 
 static void
 config_done(config_ctx* ctx)
@@ -187,7 +146,7 @@ config_done(config_ctx* ctx)
 
         /* Add the items to this poller */
         it->next = poll->items;
-        poll->items = sort_items_by_host(ctx->items);
+        poll->items = ctx->items;
     }
 
     /*
@@ -203,108 +162,125 @@ config_done(config_ctx* ctx)
     ctx->timeout = 0;
 }
 
-static rb_item*
-parse_item(const char* field, char* uri, config_ctx *ctx)
+static void
+parse_hosts (rb_item *item, char *host, config_ctx *ctx)
 {
-    char key[128];
-    rb_item *ritem;
-    rb_host *rhost;
-    int r;
+	char *x;
 
-    enum snmp_version version;
-    const char *msg;
-    char* copy;
-    char* scheme;
-    char* host;
-    char* user;
-    char* path;
+	for(;;) {
+		x = strchr (host, ',');
+		if (x)
+			*x = 0;
 
-    /* Parse the SNMP URI */
-    copy = strdup(uri);
-    msg = cfg_parse_uri(uri, &scheme, &host, &user, &path);
-    if(msg)
-        errx(2, "%s: %s: %s", ctx->confname, msg, copy);
-    free(copy);
+		if (*host) {
+			if (item->n_hostnames >= MAX_HOSTNAMES) {
+				log_warnx ("%s: too many host names: %s", ctx->confname, host);
+				break;
+			}
 
-    ASSERT(host && path);
+			item->hostnames[item->n_hostnames] = host;
+			item->n_hostnames++;
+		}
 
-    /* Currently we only support SNMP pollers */
-    msg = cfg_parse_scheme(scheme, &version);
-    if(msg)
-        errx(2, "%s: %s", msg, scheme);
+		if (!x)
+			break;
 
-    /*
-     * Build a lookup key. We can only combine requests for the same
-     * host when the version and community match.
-     */
-    user = user ? user : "public";
-    snprintf(key, sizeof(key), "%d:%s:%s", version, host, user);
-    key[sizeof(key) - 1] = 0;
+		host = x + 1;
+	}
 
-    /* See if we can find an associated host */
-    rhost = (rb_host*)hsh_get(g_state.host_by_key, key, -1);
-    if(!rhost)
-    {
-        /* Make a new one if necessary */
-        rhost = (rb_host*)xcalloc(sizeof(*rhost));
+	/* Default to localhost for a host name */
+	if (!item->n_hostnames) {
+		log_warnx ("no host found in URI, defaulting to localhost");
+		item->n_hostnames = 1;
+		item->hostnames[0] = "localhost";
+	}
 
-        rhost->version = version;
-        rhost->hostname = host;
-        rhost->community = user;
-        rhost->is_resolved = 1;
-        rhost->resolve_interval = 0;
-        rhost->last_resolved = 0;
+	item->hostindex = 0;
+}
 
-        /* Try and resolve the DNS name */
-        r = sock_any_pton(host, &(rhost->address),
-                         SANY_OPT_DEFPORT(161) | SANY_OPT_DEFLOCAL | SANY_OPT_NORESOLV);
+static void
+parse_query (rb_item *item, char *query, config_ctx *ctx)
+{
+	char *name, *value;
+	const char *msg;
 
-        if(r == -1)
-        {
-            rb_message(LOG_WARNING, "couldn't parse host address (ignoring): %s", host);
-            free(rhost);
-            return NULL;
-        }
+	/* Parse the query if it exists */
+	if (!query)
+		return;
 
-        /*
-         * If we got back SANY_AF_DNS, then it needs resolving. The actual
-         * interval and stuff are worked out in rb_config_parse() once all
-         * the hosts, polls etc... have been parsed.
-         */
-        if(r == SANY_AF_DNS)
-            rhost->is_resolved = 0;
+	msg = cfg_parse_query (query, &name, &value, &query);
+	if (msg)
+		errx (2, "%s: %s", ctx->confname, msg);
 
-        /* And add it to the list */
-        rhost->next = g_state.hosts;
-        g_state.hosts = rhost;
+	if (query && *query)
+		log_warnx ("%s: only using first query argument in snmp URI", ctx->confname);
 
-        /* And into the hash table */
-        if(!hsh_set(g_state.host_by_key, rhost->key, -1, rhost))
-            errx(1, "out of memory");
-    }
+	item->has_query = 1;
 
-    /* Make a new item */
-    ritem = (rb_item*)xcalloc(sizeof(*ritem));
-    ritem->rrdfield = field;
-    ritem->host = rhost;
-    ritem->poller = NULL; /* Set later in config_done */
-    ritem->req = NULL;
-    ritem->vtype = VALUE_UNSET;
+	/* And parse the query OID */
+	if (mib_parse (name, &(item->query_oid)) == -1)
+		errx (2, "%s: invalid MIB: %s", ctx->confname, name);
+	if (item->query_oid.len >= ASN_MAXOIDLEN)
+		errx (2, "request OID is too long");
 
-    /* And parse the OID */
-    ritem->snmpfield.syntax = SNMP_SYNTAX_NULL;
-    memset(&(ritem->snmpfield.v), 0, sizeof(ritem->snmpfield.v));
-    if(mib_parse(path, &(ritem->snmpfield.var)) == -1)
-        errx(2, "%s: invalid MIB: %s", ctx->confname, path);
+	log_debug ("parsed MIB into oid: %s -> %s", name,
+	           asn_oid2str (&item->query_oid));
 
-    rb_messagex(LOG_DEBUG, "parsed MIB into oid: %s -> %s", path,
-                asn_oid2str(&(ritem->snmpfield.var)));
+	item->query_match = value;
+	item->query_last = 0;
+	item->query_value = 0;
+}
 
-    /* And add it to the list */
-    ritem->next = ctx->items;
-    ctx->items = ritem;
+static rb_item*
+parse_item (const char *field, char *uri, config_ctx *ctx)
+{
+	rb_item *item;
+	enum snmp_version version;
+	const char *msg;
+	char *copy;
+	char *scheme, *host, *user, *path, *query;
 
-    return ritem;
+	/* Parse the SNMP URI */
+	copy = strdup (uri);
+	msg = cfg_parse_uri (uri, &scheme, &host, &user, &path, &query);
+	if (msg)
+		errx(2, "%s: %s: %s", ctx->confname, msg, copy);
+	free (copy);
+
+	ASSERT (host && path);
+
+	/* Currently we only support SNMP pollers */
+	msg = cfg_parse_scheme (scheme, &version);
+	if (msg)
+		errx (2, "%s: %s: %s", ctx->confname, msg, scheme);
+
+	/* Make a new item */
+	item = (rb_item*)xcalloc (sizeof (*item));
+	item->field = field;
+	item->community = user ? user : "public";
+	item->version = version;
+
+	item->poller = NULL; /* Set later in config_done */
+	item->vtype = VALUE_UNSET;
+
+	/* Parse the hosts, query */
+	parse_hosts (item, host, ctx);
+	parse_query (item, query, ctx);
+
+	/* And parse the main field OID */
+	if (mib_parse (path, &(item->field_oid)) == -1)
+		errx (2, "%s: invalid MIB: %s", ctx->confname, path);
+	if (item->field_oid.len >= ASN_MAXOIDLEN)
+		errx (2, "request OID is too long");
+
+	log_debug ("parsed MIB into oid: %s -> %s", path,
+	           asn_oid2str (&item->field_oid));
+
+	/* And add it to the list */
+	item->next = ctx->items;
+	ctx->items = item;
+
+	return item;
 }
 
 static void
@@ -387,11 +363,9 @@ void
 rb_config_parse()
 {
     config_ctx ctx;
-    rb_poller* poll;
 
     /* Setup the hash tables properly */
     g_state.poll_by_key = hsh_create();
-    g_state.host_by_key = hsh_create();
 
     memset(&ctx, 0, sizeof(ctx));
 
@@ -400,35 +374,6 @@ rb_config_parse()
 
     if(!g_state.polls)
         errx(1, "no config files found in config directory: %s", g_state.confdir);
-
-    /* Organize the async resolve intervals */
-    for(poll = g_state.polls; poll; poll = poll->next)
-    {
-        rb_item *item;
-        mstime resint;
-
-        /* When less than three minutes, resolve once per minute */
-        if(poll->interval <= 180000)
-            resint = 60000;
-
-        /* When between 3 and 10 minutes resolve once per cycle */
-        else if(poll->interval <= 600000)
-            resint = poll->interval;
-
-        /* Otherwise resolve thrice per cycle */
-        else
-            resint = poll->interval / 3;
-
-        for(item = poll->items; item; item = item->next)
-        {
-            /* The lowest interval (since hosts can be shared by pollers) wins */
-            if(!item->host->is_resolved && item->host->resolve_interval < resint)
-            {
-                rb_host* host = (rb_host*)item->host;
-                host->resolve_interval = resint;
-            }
-        }
-    }
 }
 
 /* -----------------------------------------------------------------------------
@@ -459,8 +404,7 @@ cfg_value(const char* filename, const char* header, const char* name,
     ASSERT(ctx->confname);
     ASSERT(name && value && header);
 
-    rb_messagex(LOG_DEBUG, "config: %s: [%s] %s = %s",
-                ctx->confname, header, name, value);
+    log_debug("config: %s: [%s] %s = %s", ctx->confname, header, name, value);
 
     config_value(header, name, value, ctx);
 
@@ -491,17 +435,6 @@ free_items(rb_item* item)
 }
 
 static void
-free_hosts(rb_host* host)
-{
-    rb_host* next;
-    for(; host; host = next)
-    {
-        next = host->next;
-        free(host);
-    }
-}
-
-static void
 free_pollers(rb_poller* poll)
 {
     rb_poller* next;
@@ -519,9 +452,6 @@ void
 rb_config_free()
 {
     hsh_free(g_state.poll_by_key);
-    hsh_free(g_state.host_by_key);
-
-    free_hosts(g_state.hosts);
 
     /* Note that rb_item's are owned by pollers */
     free_pollers(g_state.polls);

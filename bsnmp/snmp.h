@@ -152,11 +152,12 @@ enum snmp_code {
 	SNMP_CODE_OORANGE,
 };
 
-void snmp_value_free(struct snmp_value *);
+void snmp_value_clear(struct snmp_value *);
 int snmp_value_parse(const char *, enum snmp_syntax, union snmp_values *);
 int snmp_value_copy(struct snmp_value *, const struct snmp_value *);
+int snmp_value_equal(const struct snmp_value *, const struct snmp_value *);
 
-void snmp_pdu_free(struct snmp_pdu *);
+void snmp_pdu_clear(struct snmp_pdu *);
 enum snmp_code snmp_pdu_decode(struct asn_buf *b, struct snmp_pdu *pdu, int32_t *);
 enum snmp_code snmp_pdu_encode(struct snmp_pdu *pdu, struct asn_buf *resp_b);
 

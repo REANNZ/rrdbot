@@ -46,37 +46,41 @@
 #include <bsnmp/snmp.h>
 #include <mib/mib-parser.h>
 
-#include "sock-any.h"
-#include "server-mainloop.h"
 #include "config-parser.h"
+#include "log.h"
+#include "server-mainloop.h"
+#include "snmp-engine.h"
+#include "sock-any.h"
 
-
-#define RESEND_TIMEOUT      200         /* Time between SNMP resends */
 #define DEFAULT_TIMEOUT     5000        /* Default timeout for SNMP response */
 #define MAX_RETRIES         3           /* Number of SNMP packets we retry */
 
 struct context
 {
-    int socket;                         /* The socket to use */
-    unsigned char packet[0x1000];       /* The raw packet data to send */
-    struct snmp_pdu pdu;                /* The actual request data */
-    struct asn_oid oid_first;           /* The first OID we've done */
+	struct asn_oid oid_first;           	/* The first OID we've done */
 
-    struct sockaddr_any hostaddr;       /* The remote host */
-    char* hostname;                     /* The remote host */
+	/* Request data */
+	char host[128];                    	/* The remote host, resolved to an address */
+	char *community;			/* The community to use */
+	int version;				/* protocol version */
 
-    uint64_t lastsend;                  /* Time of last send */
-    int retries;                        /* Number of retries */
-    uint64_t timeout;                   /* Receive timeout */
+	struct asn_oid request_oid;		/* The OID to request */
 
-    int recursive;                      /* Whether we're going recursive or not */
-    int numeric;                        /* Print raw data */
+	int has_query;				/* Whether we are a table query or not */
+	struct asn_oid query_oid;		/* OID to use in table query */
+	char *query_match;			/* Value to match in table query */
+
+	uint64_t timeout;                   /* Receive timeout */
+
+	int recursive;                      /* Whether we're going recursive or not */
+	int numeric;                        /* Print raw data */
+	int verbose;				/* Print verbose messages */
 };
 
 static struct context ctx;
 
 /* -----------------------------------------------------------------------------
- * DUMMY CONFIG FUNCTIONS
+ * REQUIRED CALLBACK FUNCTIONS
  */
 
 int
@@ -92,260 +96,292 @@ cfg_error(const char* filename, const char* errmsg, void* data)
     return 0;
 }
 
+void
+log_vmessage (int level, int erno, const char *msg, va_list va)
+{
+	if (level >= LOG_DEBUG && !ctx.verbose)
+		return;
+
+	if (erno) {
+		errno = erno;
+		vwarn (msg, va);
+	} else {
+		vwarnx (msg, va);
+	}
+
+	if (level <= LOG_ERR)
+		exit (1);
+}
+
 /* -----------------------------------------------------------------------------
  * SNMP ENGINE
  */
 
 static void
-send_req()
+parse_host (char *host)
 {
-    struct asn_buf b;
-    ssize_t ret;
+	struct sockaddr_any addr;
+	char *x;
 
-    b.asn_ptr = ctx.packet;
-    b.asn_len = sizeof(ctx.packet);
+	/* Use the first of multiple hosts */
+	x = strchr (host, ',');
+	if (x) {
+		*x = 0;
+		warnx ("only using the first host name: %s", host);
+	}
 
-    if(snmp_pdu_encode(&ctx.pdu, &b))
-        errx(1, "couldn't encode snmp buffer");
+	if (sock_any_pton (host, &addr, SANY_OPT_DEFPORT(161) | SANY_OPT_DEFLOCAL) == -1)
+		err (1, "couldn't resolve host address: %s", host);
 
-    ret = sendto(ctx.socket, ctx.packet, b.asn_ptr - ctx.packet, 0,
-                 &SANY_ADDR(ctx.hostaddr), SANY_LEN(ctx.hostaddr));
-    if(ret == -1)
-        err(1, "couldn't send snmp packet to: %s", ctx.hostname);
-
-    /* Some bookkeeping */
-    ctx.retries++;
-    ctx.lastsend = server_get_time();
+	if (sock_any_ntop (&addr, ctx.host, sizeof (ctx.host), 0) == -1)
+		err (1, "couldn't convert host address: %s", host);
 }
 
 static void
-setup_req(char* uri)
+parse_argument (char *uri)
 {
-    enum snmp_version version;
-    const char* msg;
-    char* scheme;
-    char* copy;
-    char* user;
-    char* path;
+	enum snmp_version version;
+	const char* msg;
+	char* copy;
+	char *user, *host, *scheme, *path, *query;
+	char *value, *name;
 
-    /* Parse the SNMP URI */
-    copy = strdup(uri);
-    msg = cfg_parse_uri(uri, &scheme, &ctx.hostname, &user, &path);
-    if(msg)
-        errx(2, "%s: %s", msg, copy);
-    free(copy);
+	/* Parse the SNMP URI */
+	copy = strdup (uri);
+	msg = cfg_parse_uri (uri, &scheme, &host, &user, &path, &query);
+	if (msg)
+		errx (2, "%s: %s", msg, copy);
+	free (copy);
 
-    ASSERT(ctx.hostname && path);
+	ASSERT (host && path);
 
-    /* Currently we only support SNMP pollers */
-    msg = cfg_parse_scheme(scheme, &version);
-    if(msg)
-        errx(2, "%s: %s", msg, scheme);
+	/* Host, community */
+	parse_host (host);
+	ctx.community = user ? user : "public";
 
-    if(sock_any_pton(ctx.hostname, &ctx.hostaddr,
-                     SANY_OPT_DEFPORT(161) | SANY_OPT_DEFLOCAL) == -1)
-        err(1, "couldn't resolve host address (ignoring): %s", ctx.hostname);
+	/* Currently we only support SNMP pollers */
+	msg = cfg_parse_scheme (scheme, &version);
+	if (msg)
+		errx (2, "%s: %s", msg, scheme);
+	ctx.version = version;
 
-    memset(&ctx.pdu, 0, sizeof(ctx.pdu));
-    ctx.pdu.version = version;
-    ctx.pdu.request_id = 0;
-    ctx.pdu.type = ctx.recursive ? SNMP_PDU_GETNEXT : SNMP_PDU_GET;
-    ctx.pdu.error_status = 0;
-    ctx.pdu.error_index = 0;
-    strlcpy(ctx.pdu.community, user ? user : "public",
-            sizeof(ctx.pdu.community));
+	/* Parse the OID */
+	if (mib_parse (path, &ctx.request_oid) == -1)
+		errx (2, "invalid MIB: %s", path);
+	if (ctx.request_oid.len >= ASN_MAXOIDLEN)
+		errx (2, "request OID is too long");
 
+	/* Parse any query */
+	if (query) {
+		msg = cfg_parse_query (query, &name, &value, &query);
+		if (msg)
+			errx (2, "%s", msg);
+		if (query && *query)
+			warnx ("only using first query argument in snmp URI");
 
-    /* And parse the OID */
-    ctx.pdu.bindings[0].syntax = 0;
-    memset(&(ctx.pdu.bindings[0].v), 0, sizeof(ctx.pdu.bindings[0].v));
-    if(mib_parse(path, &(ctx.pdu.bindings[0].var)) == -1)
-        errx(2, "invalid MIB: %s", path);
+		ctx.has_query = 1;
+		ctx.query_match = value;
 
-    /* Add an item to this request */
-    ctx.pdu.nbindings = 1;
+		/* And parse the query OID */
+		if (mib_parse (name, &(ctx.query_oid)) == -1)
+			errx (2, "invalid MIB: %s", name);
 
-    /* Keep track of top for recursiveness */
-    memcpy(&ctx.oid_first, &(ctx.pdu.bindings[0].var), sizeof(ctx.oid_first));
-
-    /* Reset bookkeeping */
-    ctx.retries = 0;
-    ctx.lastsend = 0;
+		if (ctx.query_oid.len >= ASN_MAXOIDLEN)
+			errx (2, "query OID is too long");
+	}
 }
 
 static void
-setup_next(struct snmp_value* value)
+print_result (struct snmp_value* value)
 {
-    ctx.pdu.request_id++;
-    ctx.pdu.type = SNMP_PDU_GETNEXT;
+	char *t;
 
-    /* And parse the OID */
-    memcpy(&(ctx.pdu.bindings[0]), value, sizeof(struct snmp_value));
-    ctx.pdu.bindings[0].syntax = 0;
-    ctx.pdu.nbindings = 1;
+	if (ctx.numeric)
+		printf ("%s", asn_oid2str (&value->var));
+	else
+		mib_format (&value->var, stdout);
 
-    /* Reset bookkeeping */
-    ctx.retries = 0;
-    ctx.lastsend = 0;
-}
+	printf(": ");
 
-static int
-print_resp(struct snmp_pdu* pdu, uint64_t when)
-{
-    struct snmp_value* value;
-    char *t;
-    int i;
-
-    ASSERT(ctx.pdu.request_id == pdu->request_id);
-
-    for(i = 0; i < pdu->nbindings; i++)
-    {
-        value = &(pdu->bindings[i]);
-
-        if(ctx.numeric)
-            printf("%s", asn_oid2str(&(value->var)));
-        else
-            mib_format(&(value->var), stdout);
-
-        printf(": ");
-
-        switch(value->syntax)
-        {
-        case SNMP_SYNTAX_NULL:
-            printf("[null]\n");
-            break;
-        case SNMP_SYNTAX_INTEGER:
-            printf("%d\n", value->v.integer);
-            break;
-        case SNMP_SYNTAX_COUNTER:
-        case SNMP_SYNTAX_GAUGE:
-        case SNMP_SYNTAX_TIMETICKS:
-            printf("%d\n", value->v.uint32);
-            break;
-        case SNMP_SYNTAX_COUNTER64:
-            printf("%lld\n", value->v.counter64);
-            break;
-        case SNMP_SYNTAX_OCTETSTRING:
-            t = xcalloc(value->v.octetstring.len + 1);
-            memcpy(t, value->v.octetstring.octets, value->v.octetstring.len);
-            printf("%s\n", t);
-            free(t);
-            break;
-        case SNMP_SYNTAX_OID:
-            printf("%s\n", asn_oid2str(&(value->v.oid)));
-            break;
-        case SNMP_SYNTAX_IPADDRESS:
-            printf("%c.%c.%c.%c\n", value->v.ipaddress[0], value->v.ipaddress[1],
-                   value->v.ipaddress[2], value->v.ipaddress[3]);
-            break;
-        case SNMP_SYNTAX_NOSUCHOBJECT:
-            printf("[field not available on snmp server]\n");
-            break;
-        case SNMP_SYNTAX_NOSUCHINSTANCE:
-            printf("[no such instance on snmp server]\n");
-            break;
-        case SNMP_SYNTAX_ENDOFMIBVIEW:
-            return 0;
-        default:
-            printf("[unknown]\n");
-            break;
-        }
-    }
-
-    return 1;
+        switch (value->syntax) {
+	case SNMP_SYNTAX_NULL:
+		printf ("[null]\n");
+		break;
+	case SNMP_SYNTAX_INTEGER:
+		printf ("%d\n", value->v.integer);
+		break;
+	case SNMP_SYNTAX_COUNTER:
+	case SNMP_SYNTAX_GAUGE:
+	case SNMP_SYNTAX_TIMETICKS:
+		printf ("%d\n", value->v.uint32);
+		break;
+	case SNMP_SYNTAX_COUNTER64:
+		printf ("%lld\n", value->v.counter64);
+		break;
+	case SNMP_SYNTAX_OCTETSTRING:
+		t = xcalloc (value->v.octetstring.len + 1);
+		memcpy (t, value->v.octetstring.octets, value->v.octetstring.len);
+		printf ("%s\n", t);
+		free (t);
+		break;
+	case SNMP_SYNTAX_OID:
+		printf ("%s\n", asn_oid2str(&(value->v.oid)));
+		break;
+	case SNMP_SYNTAX_IPADDRESS:
+		printf ("%c.%c.%c.%c\n", value->v.ipaddress[0],
+		        value->v.ipaddress[1], value->v.ipaddress[2],
+		        value->v.ipaddress[3]);
+		break;
+	case SNMP_SYNTAX_NOSUCHOBJECT:
+		printf ("[field not available on snmp server]\n");
+		break;
+	case SNMP_SYNTAX_NOSUCHINSTANCE:
+		printf ("[no such instance on snmp server]\n");
+		break;
+	case SNMP_SYNTAX_ENDOFMIBVIEW:
+		printf ("[end of mib view on snmp server]\n");
+		break;
+	default:
+		printf ("[unknown]\n");
+		break;
+	}
 }
 
 static void
-receive_resp(int fd, int type, void* arg)
+had_failure (int code)
 {
-    char hostname[MAXPATHLEN];
-    struct sockaddr_any from;
-    struct snmp_pdu pdu;
-    struct snmp_value *val;
-    struct asn_buf b;
-    const char* msg;
-    int len, ret, subid;
-    int32_t ip;
+	ASSERT (code != 0);
 
-    ASSERT(ctx.socket == fd);
-
-    /* Read in the packet */
-
-    SANY_LEN(from) = sizeof(from);
-    len = recvfrom(ctx.socket, ctx.packet, sizeof(ctx.packet), 0,
-                   &SANY_ADDR(from), &SANY_LEN(from));
-    if(len < 0)
-    {
-        if(errno != EAGAIN && errno != EWOULDBLOCK)
-            err(1, "error receiving snmp packet from network");
-    }
-
-    if(sock_any_ntop(&from, hostname, MAXPATHLEN, 0) == -1)
-        strcpy(hostname, "[UNKNOWN]");
-
-    /* Now parse the packet */
-
-    b.asn_ptr = ctx.packet;
-    b.asn_len = len;
-
-    ret = snmp_pdu_decode(&b, &pdu, &ip);
-    if(ret != SNMP_CODE_OK)
-        errx(1, "invalid snmp packet received from: %s", hostname);
-
-    /* It needs to match something we're waiting for */
-    if(pdu.request_id != ctx.pdu.request_id)
-        return;
-
-    /* Check for errors */
-    if(pdu.error_status != SNMP_ERR_NOERROR)
-    {
-        msg = snmp_get_errmsg (pdu.error_status);
-        if(msg)
-            errx(1, "snmp error from host '%s': %s", hostname, msg);
-        else
-            errx(1, "unknown snmp error from host '%s': %d", hostname, pdu.error_status);
-        return;
-    }
-
-    subid = ret = 1;
-
-    if(pdu.nbindings > 0)
-    {
-        val = &(pdu.bindings[pdu.nbindings - 1]);
-        subid = asn_compare_oid(&ctx.oid_first, &(val->var)) == 0 ||
-                asn_is_suboid(&ctx.oid_first, &(val->var));
-    }
-
-    /* Print the packet values */
-    if(!ctx.recursive || subid)
-        ret = print_resp(&pdu, server_get_time());
-
-    if(ret && ctx.recursive && subid)
-    {
-        /* If recursive, move onto next one */
-        setup_next(&(pdu.bindings[pdu.nbindings - 1]));
-        send_req();
-        return;
-    }
-
-    server_stop ();
+	if (code < 1)
+		errx (1, "couldn't successfully communicate with server");
+	else
+		errx (1, "server returned error: %s", snmp_get_errmsg (code));
 }
 
-static int
-send_timer(uint64_t when, void* arg)
+static void
+process_recursive (void)
 {
-    if(ctx.lastsend == 0)
-        return 1;
+	struct snmp_value value;
+	struct asn_oid last;
+	int i, ret, done;
 
-    /* Check for timeouts */
-    if(ctx.lastsend + ctx.timeout < when)
-        errx(1, "timed out waiting for response from server");
+	memcpy (&last, &ctx.request_oid, sizeof (last));
+	memset (&value, 0, sizeof (value));
 
-    /* Resend packets when no response */
-    if(ctx.retries < MAX_RETRIES && ctx.lastsend + RESEND_TIMEOUT < when)
-        send_req();
+	for (i = 0; ; ++i) {
 
-    return 1;
+		memcpy (&value.var, &last, sizeof (value.var));
+
+		ret = snmp_engine_sync (ctx.host, ctx.community, ctx.version,
+		                        0, ctx.timeout, SNMP_PDU_GETNEXT, &value);
+
+		/* Reached the end */
+		if (i == 0 && ret == SNMP_ERR_NOSUCHNAME)
+			return;
+
+		if (ret != SNMP_ERR_NOERROR) {
+			had_failure (ret);
+			return;
+		}
+
+		/* Check that its not past the end */
+		done = asn_compare_oid (&ctx.request_oid, &value.var) != 0 &&
+		        !asn_is_suboid (&ctx.request_oid, &value.var);
+
+		if (!done) {
+			print_result (&value);
+			memcpy (&last, &value.var, sizeof (last));
+		}
+
+		snmp_value_clear (&value);
+
+		if (done)
+			return;
+	}
+}
+
+static void
+process_query (void)
+{
+	struct snmp_value value;
+	struct snmp_value match;
+	asn_subid_t sub;
+	int matched, ret;
+
+	ASSERT (ctx.has_query);
+	memset (&value, 0, sizeof (value));
+	memset (&match, 0, sizeof (match));
+
+	/* Loop looking for the value */
+	for (sub = 0; ; ++sub) {
+
+		/* Build up the query OID we're going for */
+		memcpy (&value.var, &ctx.query_oid, sizeof (value.var));
+		ASSERT (value.var.len < ASN_MAXOIDLEN);
+		value.var.subs[value.var.len] = sub;
+		value.var.len++;
+
+		/* Do the request */
+		ret = snmp_engine_sync (ctx.host, ctx.community, ctx.version,
+		                        0, ctx.timeout, SNMP_PDU_GET, &value);
+
+		/* Try and see if its not zero based */
+		if (ret == SNMP_ERR_NOSUCHNAME && sub == 0)
+			continue;
+
+		if (ret != SNMP_ERR_NOERROR) {
+			had_failure (ret);
+			return;
+		}
+
+		matched = 0;
+
+		/* Match the results */
+		if (ctx.query_match)
+			matched = snmp_engine_match (&value, ctx.query_match);
+
+		/* When query match is null, anything matches */
+		else
+			matched = 1;
+
+		snmp_value_clear (&value);
+
+		if (matched)
+			break;
+	}
+
+	memcpy (&value.var, &ctx.request_oid, sizeof (value.var));
+	ASSERT (value.var.len < ASN_MAXOIDLEN);
+	value.var.subs[value.var.len] = sub;
+	value.var.len++;
+
+	ret = snmp_engine_sync (ctx.host, ctx.community, ctx.version,
+	                        0, ctx.timeout, SNMP_PDU_GET, &value);
+
+	if (ret != SNMP_ERR_NOERROR)
+		had_failure (ret);
+	else
+		print_result (&value);
+}
+
+static void
+process_simple (void)
+{
+	struct snmp_value value;
+	int ret;
+
+	memset (&value, 0, sizeof (value));
+	memcpy (&value.var, &ctx.request_oid, sizeof (value.var));
+
+	ret = snmp_engine_sync (ctx.host, ctx.community, ctx.version,
+	                        0, ctx.timeout, SNMP_PDU_GET, &value);
+
+	if (ret != SNMP_ERR_NOERROR)
+		had_failure (ret);
+	else
+		print_result (&value);
+
+	snmp_value_clear (&value);
 }
 
 /* -----------------------------------------------------------------------------
@@ -355,7 +391,7 @@ send_timer(uint64_t when, void* arg)
 static void
 usage()
 {
-    fprintf(stderr, "usage: rrdbot-get [-Mnr] [-t timeout] [-m mibdir] snmp://community@host/oid\n");
+    fprintf(stderr, "usage: rrdbot-get [-Mnrv] [-t timeout] [-m mibdir] snmp://community@host/oid\n");
     fprintf(stderr, "       rrdbot-get -V\n");
     exit(2);
 }
@@ -368,100 +404,103 @@ version()
 }
 
 int
-main(int argc, char* argv[])
+main (int argc, char* argv[])
 {
-    struct sockaddr_in addr;
-    char ch;
-    char* t;
+	char ch;
+	char* t;
 
-    /* Defaults */
-    memset(&ctx, 0, sizeof(ctx));
-    ctx.socket = -1;
-    ctx.timeout = DEFAULT_TIMEOUT;
+	/* Defaults */
+	memset (&ctx, 0, sizeof (ctx));
+	ctx.timeout = DEFAULT_TIMEOUT;
 
-    /* Parse the arguments nicely */
-    while((ch = getopt(argc, argv, "m:Mnrt:V")) != -1)
-    {
-        switch(ch)
-        {
+	/* Parse the arguments nicely */
+	while ((ch = getopt (argc, argv, "m:Mnrt:vV")) != -1) {
+		switch (ch)
+		{
 
-        /* mib directory */
-        case 'm':
-            mib_directory = optarg;
-            break;
+		/* mib directory */
+		case 'm':
+			mib_directory = optarg;
+			break;
 
-        /* MIB load warnings */
-        case 'M':
-            mib_warnings = 1;
-            break;
+		/* MIB load warnings */
+		case 'M':
+			mib_warnings = 1;
+			break;
 
-        /* Numeric output */
-        case 'n':
-            ctx.numeric = 1;
-            break;
+		/* Numeric output */
+		case 'n':
+			ctx.numeric = 1;
+			break;
 
-        /* SNMP walk (recursive)*/
-        case 'r':
-            ctx.recursive = 1;
-            break;
+		/* SNMP walk (recursive)*/
+		case 'r':
+			ctx.recursive = 1;
+			break;
 
-        /* The timeout */
-        case 't':
-            ctx.timeout = strtoul(optarg, &t, 10);
-            if(*t)
-                errx(2, "invalid timeout: %s", optarg);
-            ctx.timeout *= 1000;
-            break;
+		/* The timeout */
+		case 't':
+			ctx.timeout = strtoul (optarg, &t, 10);
+			if (*t)
+				errx (2, "invalid timeout: %s", optarg);
+			ctx.timeout *= 1000;
+			break;
 
-        /* Print version number */
-        case 'V':
-            version();
-            break;
+		/* Verbose */
+		case 'v':
+			ctx.verbose = 1;
+			break;
 
-        /* Usage information */
-        case '?':
-        default:
-            usage();
-            break;
-        }
-    }
+		/* Print version number */
+		case 'V':
+			version ();
+			break;
 
-    argc -= optind;
-    argv += optind;
+		/* Usage information */
+		case '?':
+		default:
+			usage ();
+			break;
+		}
+	}
 
-    if(argc != 1)
-        usage();
+	argc -= optind;
+	argv += optind;
 
-    server_init();
+	if(argc != 1)
+		usage ();
 
-    setup_req(argv[0]);
+	server_init ();
+    	snmp_engine_init (MAX_RETRIES);
 
-    /* Setup the SNMP socket */
-    ctx.socket = socket(PF_INET, SOCK_DGRAM, 0);
-    if(ctx.socket < 0)
-        err(1, "couldn't open snmp socket");
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    if(bind(ctx.socket, (struct sockaddr*)&addr, sizeof(addr)) < 0)
-        err(1, "couldn't listen on port");
-    if(server_watch(ctx.socket, SERVER_READ, receive_resp, NULL) == -1)
-        err(1, "couldn't listen on socket");
+    	parse_argument (argv[0]);
 
-    /* Send off first request */
-    send_req();
+    	/*
+    	 * Recursive query walks everything at or lower than the
+    	 * specified OID in the tree.
+    	 */
+    	if (ctx.recursive) {
+    		if (ctx.has_query)
+    			errx (2, "cannot do a recursive table query");
+    		process_recursive ();
 
-    /* We fire off the resend timer every 1/5 second */
-    if(server_timer(RESEND_TIMEOUT, send_timer, NULL) == -1)
-        err(1, "couldn't setup timer");
+    	/*
+    	 * Does a table query, lookup the appropriate row, and
+    	 * the value of the OID for that row.
+    	 */
+    	} else if (ctx.has_query) {
+    		ASSERT (!ctx.recursive);
+    		process_query ();
 
-    /* Wait for responses */
-    server_run();
+    	/*
+    	 * A simple value lookup.
+    	 */
+    	} else {
+    		process_simple ();
+    	}
 
-    /* Done */
-    server_unwatch(ctx.socket);
-    close(ctx.socket);
+    	snmp_engine_stop ();
+    	server_uninit ();
 
-    server_uninit();
-
-    return 0;
+    	return 0;
 }

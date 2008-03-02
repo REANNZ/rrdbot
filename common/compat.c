@@ -136,15 +136,18 @@ strtob(const char* str)
 size_t
 strlcpy(char *dst, const char *src, size_t len)
 {
-        size_t ret = strlen(dst);
+        size_t ret = strlen(src);
+        size_t copied;
 
-        while (len > 1) {
+        while (ret > 0 && len > 1) {
                 *dst++ = *src++;
-                len--;
+                --len;
+                --ret;
+                ++copied;
         }
         if (len > 0)
                 *dst = '\0';
-        return (ret);
+        return copied;
 }
 
 #endif /* HAVE_STRLCPY */
