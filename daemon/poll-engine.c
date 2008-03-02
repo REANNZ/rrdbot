@@ -285,6 +285,7 @@ query_response (int request, int code, struct snmp_value *value, void *arg)
 	 * start search again from the base.
 	 */
 	if (!matched && item->query_last != 0) {
+		log_debug ("last table index did not match, starting from zero");
 		item->query_last = 0;
 		query_request (item, 1);
 
@@ -293,6 +294,7 @@ query_response (int request, int code, struct snmp_value *value, void *arg)
 	 * perhaps its a one based table
 	 */
 	} else if (!found && item->query_value == 0) {
+		log_debug ("no zero index in table, trying index one");
 		item->query_last = 0;
 		query_request (item, 0);
 
@@ -302,7 +304,8 @@ query_response (int request, int code, struct snmp_value *value, void *arg)
 	 */
 	} else if (!found) {
 		item->query_last = 0;
-		log_warn ("couldn't find match for query value: %s", item->query_match);
+		log_warn ("couldn't find match for query value: %s",
+		          item->query_match ? item->query_match : "");
 		complete_request (item, SNMP_ERR_NOSUCHNAME);
 
 
@@ -310,6 +313,7 @@ query_response (int request, int code, struct snmp_value *value, void *arg)
 	 * Found a value but didn't match, so try next one.
 	 */
 	} else if (!matched) {
+		log_debug ("table index %d did not match, trying next", item->query_value);
 		item->query_last = 0;
 		query_request (item, 0);
 
@@ -318,6 +322,9 @@ query_response (int request, int code, struct snmp_value *value, void *arg)
 	 * oid and the last numeric part of the query oid.
 	 */
 	} else {
+
+		log_debug ("table index %d matched query value: %s",
+		           item->query_value, item->query_match ? item->query_match : "");
 
 		/* Build up the OID */
 		oid = item->field_oid;
