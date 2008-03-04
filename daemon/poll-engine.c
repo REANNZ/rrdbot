@@ -439,6 +439,9 @@ prep_timer (mstime when, void* arg)
 	if (server_timer (poll->interval, poller_timer, poll) == -1)
 		log_error ("couldn't setup poller timer");
 
+	/* Run the poll the first time */
+	poller_timer (when, poll);
+
 	/* Setup the next poller anywhere between 0 and 750 ms */
 	next = rand () % 750;
 	server_oneshot (next, prep_timer, poll->next);
