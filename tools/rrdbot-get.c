@@ -253,7 +253,7 @@ had_failure (int code)
 	ASSERT (code != 0);
 
 	if (code < 1)
-		errx (1, "couldn't successfully communicate with server");
+		errx (1, "couldn't successfully communicate with server at: %s", ctx.host);
 	else
 		errx (1, "server returned error: %s", snmp_get_errmsg (code));
 }
