@@ -304,8 +304,8 @@ query_response (int request, int code, struct snmp_value *value, void *arg)
 	 */
 	} else if (!found) {
 		item->query_last = 0;
-		log_warn ("couldn't find match for query value: %s",
-		          item->query_match ? item->query_match : "");
+		log_warnx ("couldn't find match for query value: %s",
+		           item->query_match ? item->query_match : "");
 		complete_request (item, SNMP_ERR_NOSUCHNAME);
 
 
