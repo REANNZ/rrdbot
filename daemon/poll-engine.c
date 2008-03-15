@@ -56,15 +56,18 @@
  */
 
 static void
-complete_request (rb_item *item, int code)
+complete_requests (rb_item *item, int code)
 {
 	int host;
 
 	ASSERT (item);
 
-	if (item->request)
-		snmp_engine_cancel (item->request);
-	item->request = 0;
+	if (item->field_request)
+		snmp_engine_cancel (item->field_request);
+	item->field_request = 0;
+	if (item->query_request)
+		snmp_engine_cancel (item->query_request);
+	item->query_request = 0;
 
 	/* If we have multiple host names then try the next host */
 	if (code != SNMP_ERR_NOERROR) {
@@ -77,16 +80,16 @@ complete_request (rb_item *item, int code)
 }
 
 static void
-cancel_request (rb_item *item, const char *reason)
+cancel_requests (rb_item *item, const char *reason)
 {
 	ASSERT (item);
 	ASSERT (reason);
-	ASSERT (item->request);
+	ASSERT (item->field_request || item->query_request);
 
         log_debug ("value for field '%s': %s", item->field, reason);
         item->vtype = VALUE_UNSET;
 
-        complete_request (item, -1);
+        complete_requests (item, -1);
 }
 
 static void
@@ -98,26 +101,36 @@ force_poll (rb_poller *poll, mstime when, const char *reason)
 	ASSERT (poll);
 	ASSERT (reason);
 
-	/* Now see if the entire request is done */
+	/* Now see if the all the requests are done */
 	for (item = poll->items; item; item = item->next) {
-		if (item->request) {
-			cancel_request (item, reason);
+		if (item->field_request || item->query_request) {
+			cancel_requests (item, reason);
 			forced = 1;
 		}
-		ASSERT (!item->request);
+		ASSERT (!item->field_request);
+		ASSERT (!item->query_request);
 	}
 
-	if (forced) {
+	if (!forced && !poll->polling)
+		return;
 
-		/*
-		 * We note the failure has having taken place halfway between
-		 * the request and the current time.
-		 */
-		poll->last_polled = poll->last_request + ((when - poll->last_request) / 2);
-
-		/* And send off our collection of values */
-		rb_rrd_update (poll);
+	/* Mark any non-matched queries as unset */
+	for (item = poll->items; item; item = item->next) {
+		if (item->has_query && !item->query_matched)
+			item->vtype = VALUE_UNSET;
 	}
+
+	/*
+	 * We note the failure has having taken place halfway between
+	 * the request and the current time.
+	 */
+	poll->last_polled = poll->last_request + ((when - poll->last_request) / 2);
+
+	/* And send off our collection of values */
+	rb_rrd_update (poll);
+
+	/* This polling cycle is no longer active */
+	poll->polling = 0;
 }
 
 static void
@@ -126,11 +139,18 @@ finish_poll (rb_poller *poll, mstime when)
 	rb_item *item;
 
 	ASSERT (poll);
+	ASSERT (poll->polling);
 
-	/* Now see if the entire request is done */
+	/* See if the all the requests are done */
 	for (item = poll->items; item; item = item->next) {
-		if (item->request)
+		if (item->field_request || item->query_request)
 			return;
+	}
+
+	/* Mark any non-matched queries as unset */
+	for (item = poll->items; item; item = item->next) {
+		if (item->has_query && !item->query_matched)
+			item->vtype = VALUE_UNSET;
 	}
 
 	/* Update the book-keeping */
@@ -138,6 +158,9 @@ finish_poll (rb_poller *poll, mstime when)
 
 	/* And send off our collection of values */
 	rb_rrd_update (poll);
+
+	/* This polling cycle is no longer active */
+	poll->polling = 0;
 }
 
 static void
@@ -146,10 +169,10 @@ field_response (int request, int code, struct snmp_value *value, void *arg)
 	rb_item *item = arg;
 	const char *msg = NULL;
 
-	ASSERT (item->request == request);
+	ASSERT (item->field_request == request);
 
 	/* Mark this item as done */
-	item->request = 0;
+	item->field_request = 0;
 
 	/* Errors result in us writing U */
 	if (code != SNMP_ERR_NOERROR) {
@@ -204,7 +227,7 @@ field_response (int request, int code, struct snmp_value *value, void *arg)
                 	           item->field);
 	}
 
-	complete_request (item, code);
+	complete_requests (item, code);
 
 	/* If the entire poll is done, then complete it */
 	finish_poll (item->poller, server_get_time ());
@@ -216,42 +239,182 @@ field_request (rb_item *item)
 	int req;
 
 	ASSERT (item);
-	ASSERT (!item->request);
+	ASSERT (!item->field_request);
 
         item->vtype = VALUE_UNSET;
 
 	req = snmp_engine_request (item->hostnames[item->hostindex], item->community,
 	                           item->version, item->poller->interval, item->poller->timeout,
 	                           SNMP_PDU_GET, &item->field_oid, field_response, item);
-	item->request = req;
+	item->field_request = req;
 }
 
 /* Forward declaration */
-static void query_request (rb_item *item, int first);
+static void query_search_request (rb_item *item);
 
 static void
-query_response (int request, int code, struct snmp_value *value, void *arg)
+query_value_request (rb_item *item, asn_subid_t subid)
+{
+	struct asn_oid oid;
+	int req;
+
+	ASSERT (item);
+	ASSERT (item->has_query);
+	ASSERT (!item->query_request);
+	ASSERT (!item->field_request);
+
+        item->vtype = VALUE_UNSET;
+
+	/* OID for the actual value */
+	oid = item->field_oid;
+	ASSERT (oid.len < ASN_MAXOIDLEN);
+	oid.subs[oid.len] = subid;
+	++oid.len;
+
+	log_debug ("query requesting value for table index: %u", subid);
+
+	req = snmp_engine_request (item->hostnames[item->hostindex], item->community,
+	                           item->version, item->poller->interval, item->poller->timeout,
+	                           SNMP_PDU_GET, &oid, field_response, item);
+
+        /* Value retrieval is active */
+	item->field_request = req;
+}
+
+static void
+query_next_response (int request, int code, struct snmp_value *value, void *arg)
 {
 	rb_item *item = arg;
-	struct asn_oid oid;
-	int matched, req, found;
-
-	ASSERT (request == item->request);
-	ASSERT (item->has_query);
+	asn_subid_t subid;
+	int matched;
 
 	/*
-	 * This was the number we last appended.
+	 * Called when we get the next OID in a table
 	 */
-	ASSERT (item->query_value >= 0);
-	item->request = 0;
 
-	/* Problems communicating with the server? */
-	if (code != SNMP_ERR_NOERROR && code != SNMP_ERR_NOSUCHNAME) {
-		complete_request (item, code);
+	ASSERT (request == item->query_request);
+	ASSERT (!item->field_request);
+	item->query_request = 0;
+
+	if (code == SNMP_ERR_NOERROR) {
+		ASSERT (value);
+
+		/* Convert these result codes into 'not found' */
+		switch (value->syntax) {
+		case SNMP_SYNTAX_NOSUCHOBJECT:
+		case SNMP_SYNTAX_NOSUCHINSTANCE:
+		case SNMP_SYNTAX_ENDOFMIBVIEW:
+			code = SNMP_ERR_NOSUCHNAME;
+			break;
+
+		/*
+		 * Make sure that we haven't gone past the end. For it to
+		 * be in the table it must be exactly one longer (the table index)
+		 * and otherwise identical.
+		 */
+		default:
+			if (item->query_oid.len + 1 != value->var.len ||
+			    !asn_is_suboid (&item->query_oid, &value->var))
+				code = SNMP_ERR_NOSUCHNAME;
+			break;
+		};
+	}
+
+	if (code == SNMP_ERR_NOSUCHNAME)
+		log_debug ("query couldn't find table index that matches: %s",
+		           item->query_match ? item->query_match : "[null]");
+
+
+	/* Problems communicating with the server, or not found */
+	if (code != SNMP_ERR_NOERROR) {
+		memset (&item->query_last, 0, sizeof (item->query_last));
+		complete_requests (item, code);
 		return;
 	}
 
-	found = 0;
+	/* Save away the last OID we've seen */
+	item->query_last = value->var;
+	item->query_searched = 1;
+
+	ASSERT (value);
+
+	/* Match the query valu ereceived */
+	if (item->query_match)
+		matched = snmp_engine_match (value, item->query_match);
+
+	/* When query match is null, anything matches */
+	else
+		matched = 1;
+
+	item->query_matched = matched;
+	item->vtype = VALUE_UNSET;
+
+	if (matched) {
+		/* Do a query for the field value with this sub id */
+		subid = value->var.subs[value->var.len - 1];
+		query_value_request (item, subid);
+	} else {
+		/* Look for the next table index */
+		query_search_request (item);
+	}
+}
+
+static void
+query_search_request (rb_item *item)
+{
+	struct asn_oid *oid;
+	int req;
+
+	ASSERT (item);
+	ASSERT (item->has_query);
+	ASSERT (!item->query_request);
+	ASSERT (!item->field_request);
+
+	item->query_matched = 0;
+	item->vtype = VALUE_UNSET;
+
+	/* Start with the OID without any table index */
+	if (!item->query_searched) {
+		oid = &item->query_oid;
+		memset (&item->query_last, 0, sizeof (item->query_last));
+		log_debug ("query looking for first table index");
+
+	/* Go for the next one in the search */
+	} else {
+		ASSERT (item->query_last.len > 0);
+		oid = &item->query_last;
+		log_debug ("query looking for next table index");
+	}
+
+	req = snmp_engine_request (item->hostnames[item->hostindex], item->community,
+	                           item->version, item->poller->interval, item->poller->timeout,
+	                           SNMP_PDU_GETNEXT, oid, query_next_response, item);
+
+	item->query_request = req;
+}
+
+static void
+query_match_response (int request, int code, struct snmp_value *value, void *arg)
+{
+	rb_item *item = arg;
+	int matched;
+
+	/*
+	 * Callback when SNMP request in query_request() completes.
+	 *
+	 * We receive a value back from the server when querying the table match OID,
+	 * whenever we queried it directly (without the search).
+	 */
+
+	ASSERT (request == item->query_request);
+	item->query_request = 0;
+
+	/* Problems communicating with the server? */
+	if (code != SNMP_ERR_NOERROR && code != SNMP_ERR_NOSUCHNAME) {
+		complete_requests (item, code);
+		return;
+	}
+
 	matched = 0;
 
 	if (code == SNMP_ERR_NOERROR) {
@@ -262,8 +425,6 @@ query_response (int request, int code, struct snmp_value *value, void *arg)
 		case SNMP_SYNTAX_NOSUCHOBJECT:
 		case SNMP_SYNTAX_NOSUCHINSTANCE:
 		case SNMP_SYNTAX_ENDOFMIBVIEW:
-			found = 0;
-			matched = 0;
 			break;
 
 		/* See if we have a match */
@@ -274,116 +435,102 @@ query_response (int request, int code, struct snmp_value *value, void *arg)
 			/* When query match is null, anything matches */
 			else
 				matched = 1;
-
-			found = 1;
 			break;
 		};
 	}
 
-	/*
-	 * When we had found this before, but then can no longer find it, we
-	 * start search again from the base.
-	 */
-	if (!matched && item->query_last != 0) {
-		log_debug ("last table index did not match, starting from zero");
-		item->query_last = 0;
-		query_request (item, 1);
+	item->query_matched = matched;
+	if (matched)
+		return;
+
+	log_debug ("query previous index did not match: %s",
+	           item->query_match ? item->query_match : "[null]");
 
 	/*
-	 * When we find no value at zero, then we skip ahead and see if
-	 * perhaps its a one based table
+	 * When it doesn't match cancel any pending value request, and
+	 * start a search for a match.
 	 */
-	} else if (!found && item->query_value == 0) {
-		log_debug ("no zero index in table, trying index one");
-		item->query_last = 0;
-		query_request (item, 0);
-
-	/*
-	 * Any other time we don't find a value, its game over for us,
-	 * we didn't find a match and are out of values.
-	 */
-	} else if (!found) {
-		item->query_last = 0;
-		log_warnx ("couldn't find match for query value: %s",
-		           item->query_match ? item->query_match : "");
-		complete_request (item, SNMP_ERR_NOSUCHNAME);
-
-
-	/*
-	 * Found a value but didn't match, so try next one.
-	 */
-	} else if (!matched) {
-		log_debug ("table index %d did not match, trying next", item->query_value);
-		item->query_last = 0;
-		query_request (item, 0);
-
-	/*
-	 * When we have a match send off a new request, built from the original
-	 * oid and the last numeric part of the query oid.
-	 */
-	} else {
-
-		log_debug ("table index %d matched query value: %s",
-		           item->query_value, item->query_match ? item->query_match : "");
-
-		/* Build up the OID */
-		oid = item->field_oid;
-		ASSERT (oid.len < ASN_MAXOIDLEN);
-		oid.subs[oid.len] = item->query_value;
-		++oid.len;
-
-		item->query_last = item->query_value;
-	        item->vtype = VALUE_UNSET;
-
-		req = snmp_engine_request (item->hostnames[item->hostindex], item->community,
-		                           item->version, item->poller->interval, item->poller->timeout,
-		                           SNMP_PDU_GET, &oid, field_response, item);
-
-		item->request = req;
-	}
+	if (item->field_request)
+		snmp_engine_cancel (item->field_request);
+	item->field_request = 0;
+	query_search_request (item);
 }
 
 static void
-query_request (rb_item *item, int first)
+query_pair_request (rb_item *item, asn_subid_t subid)
 {
 	struct asn_oid oid;
 	int req;
 
 	ASSERT (item);
-	ASSERT (!item->request);
 	ASSERT (item->has_query);
+	ASSERT (!item->query_request);
+	ASSERT (!item->field_request);
+
+	log_debug ("query requesting match and value pair for index: %u", subid);
 
         item->vtype = VALUE_UNSET;
+        item->query_matched = 0;
 
-	/*
-	 * Build up an appropriate oid.
-	 *
-	 * We first try any oid that worked last time, and see if
-	 * it still has the same value, to avoid doing the brute
-	 * force search each time needlessly.
-	 */
-
-	/* The first time the request has been called */
-	if (first)
-		item->query_value = item->query_last;
-
-	/* Try the next one in turn */
-	else
-		item->query_value = item->query_value + 1;
-
-	/* Build up the OID */
+	/* OID for the value to match */
 	oid = item->query_oid;
 	ASSERT (oid.len < ASN_MAXOIDLEN);
-	oid.subs[oid.len] = item->query_value;
+	oid.subs[oid.len] = subid;
 	++oid.len;
 
-	/* Make the request */
 	req = snmp_engine_request (item->hostnames[item->hostindex], item->community,
 	                           item->version, item->poller->interval, item->poller->timeout,
-	                           SNMP_PDU_GET, &oid, query_response, item);
+	                           SNMP_PDU_GET, &oid, query_match_response, item);
 
-        /* Mark item as active by this request */
-	item->request = req;
+	/* Query is active */
+	item->query_request = req;
+
+	/* OID for the actual value */
+	oid = item->field_oid;
+	ASSERT (oid.len < ASN_MAXOIDLEN);
+	oid.subs[oid.len] = subid;
+	++oid.len;
+
+	req = snmp_engine_request (item->hostnames[item->hostindex], item->community,
+	                           item->version, item->poller->interval, item->poller->timeout,
+	                           SNMP_PDU_GET, &oid, field_response, item);
+
+        /* Value retrieval is active */
+	item->field_request = req;
+}
+
+static void
+query_request (rb_item *item)
+{
+	ASSERT (item);
+	ASSERT (!item->query_request);
+	ASSERT (!item->field_request);
+
+	item->query_searched = 0;
+	item->query_matched = 0;
+        item->vtype = VALUE_UNSET;
+
+	if (item->query_last.len) {
+
+	        /*
+	         * If we've done this query before, then we know the last matching table
+	         * index. We build a two part request that gets the match value for the
+	         * table index it was last seen on, and the actual value that we want.
+	         *
+	         * Doing this in one request is more efficient, then we check if the
+	         * match value matches the query in the response.
+	         */
+		query_pair_request (item, item->query_last.subs[item->query_last.len - 1]);
+
+	} else {
+
+		/*
+		 * We don't have a last matching table index, so start the search.
+		 * For indexes. We'll then query each of those indexes with the two
+		 * part request, as above.
+		 */
+		query_search_request (item);
+	}
 }
 
 static int
@@ -400,6 +547,8 @@ poller_timer (mstime when, void *arg)
 
 	/* Mark this poller as starting requests now */
 	poll->last_request = when;
+	ASSERT (!poll->polling);
+	poll->polling = 1;
 
 	/*
 	 * Send off the next query. This needs to be done after
@@ -407,7 +556,7 @@ poller_timer (mstime when, void *arg)
 	 */
 	for (item = poll->items; item; item = item->next) {
 		if (item->has_query)
-			query_request (item, 1);
+			query_request (item);
 		else
 			field_request (item);
 	}

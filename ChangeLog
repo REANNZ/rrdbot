@@ -1,6 +1,6 @@
 0.9 ?????
-    - Support failover between multiple agents
-    - Support table queries
+    - Support failover between multiple agents.
+    - Support table queries by looking up table indexes.
     - Major refactoring of internals. 
     
 0.8  [2007-07-16]

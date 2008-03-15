@@ -227,8 +227,9 @@ parse_query (rb_item *item, char *query, config_ctx *ctx)
 	           asn_oid2str (&item->query_oid));
 
 	item->query_match = value;
-	item->query_last = 0;
-	item->query_value = 0;
+	memset (&item->query_last, 0, sizeof (item->query_last));
+	item->query_matched = 0;
+	item->query_searched = 0;
 }
 
 static rb_item*

@@ -305,10 +305,20 @@ host_cleanup (void)
  * ASYNC REQUEST PROCESSING
  */
 
+#define MAKE_REQUEST_ID(snmp, cb) \
+	((((snmp) & 0xFFFFFF) << 8) | (cb & 0xFF))
+#define REQUEST_ID_SNMP(id) \
+	((id) >> 8)
+#define REQUEST_ID_CB(id) \
+	((id) & 0xFF)
+
 struct request
 {
 	/* The SNMP request identifier */
-	uint id;
+	uint snmp_id;
+
+	/* References, useful since we have callbacks */
+	int refs;
 
 	mstime next_send;         /* Time of the next packet send */
 	mstime last_sent;         /* Time last sent */
@@ -332,7 +342,7 @@ struct request
 static int snmp_retries = 3;
 
 /* The last request id */
-static uint snmp_request_id = 100000;
+static uint snmp_request_id = 1;
 
 /* The SNMP socket we're communicating on */
 static int snmp_socket = -1;
@@ -353,8 +363,8 @@ static void
 request_release (struct request *req)
 {
 	/* It should no longer be referred to any of these places */
-	ASSERT (!hsh_get (snmp_preparing, &req->id, sizeof (req->id)));
-	ASSERT (!hsh_get (snmp_processing, &req->id, sizeof (req->id)));
+	ASSERT (!hsh_get (snmp_preparing, &req->snmp_id, sizeof (req->snmp_id)));
+	ASSERT (!hsh_get (snmp_processing, &req->snmp_id, sizeof (req->snmp_id)));
 
 	snmp_pdu_clear (&req->pdu);
 	free (req);
@@ -394,7 +404,7 @@ request_send (struct request* req, mstime when)
 		if (ret == -1)
 			log_error ("couldn't send snmp packet to: %s", req->host->hostname);
 		else
-			log_debug ("sent request #%d to: %s", req->id, req->host->hostname);
+			log_debug ("sent request #%d to: %s", req->snmp_id, req->host->hostname);
 	}
 }
 
@@ -406,18 +416,30 @@ request_failure (struct request *req, int code)
 
 	ASSERT (req);
 	ASSERT (code != 0);
+	ASSERT (hsh_get (snmp_processing, &req->snmp_id, sizeof (req->snmp_id)) == req);
 
-	log_debug ("failed request #%d to '%s' with code %d", req->id, req->host->hostname, code);
+	log_debug ("failed request #%d to '%s' with code %d", req->snmp_id, req->host->hostname, code);
 
 	/* For each request SNMP value... */
 	for (j = 0; j < req->pdu.nbindings; ++j) {
+
+		if (!req->callbacks[j].func)
+			continue;
+
 		/* ... let callback know */
-		if (req->callbacks[j].func)
-			(req->callbacks[j].func) (req->id, code, NULL, req->callbacks[j].arg);
+		(req->callbacks[j].func) (MAKE_REQUEST_ID (req->snmp_id, j),
+				          code, NULL, req->callbacks[j].arg);
+
+		/*
+		 * Request could have been freed by the callback, by calling the cancel
+		 * function, check and bail if so.
+		 */
+		if (hsh_get (snmp_processing, &req->snmp_id, sizeof (req->snmp_id)) != req)
+			return;
 	}
 
 	/* Remove from the processing list */
-	val = hsh_rem (snmp_processing, &req->id, sizeof (req->id));
+	val = hsh_rem (snmp_processing, &req->snmp_id, sizeof (req->snmp_id));
 	ASSERT (val == req);
 
 	/* And free the request */
@@ -429,24 +451,29 @@ request_get_dispatch (struct request* req, struct snmp_pdu* pdu)
 {
 	struct snmp_value* pvalue;
 	struct snmp_value* rvalue;
-	int i, j, last, processed;
+	int i, j, skipped, processed;
 	void *val;
 
 	ASSERT (req);
 	ASSERT (pdu);
-	ASSERT (req->id == pdu->request_id);
+	ASSERT (req->snmp_id == pdu->request_id);
 	ASSERT (pdu->error_status == SNMP_ERR_NOERROR);
 	ASSERT (req->pdu.type == SNMP_PDU_GET);
+	ASSERT (hsh_get (snmp_processing, &req->snmp_id, sizeof (req->snmp_id)) == req);
 
 	/*
 	 * For SNMP GET requests we check that the values that came back
 	 * were in fact for the same values we requested, and fix any
 	 * ordering issues etc.
 	 */
-	for (j = 0; j < req->pdu.nbindings; ++j) {
+	skipped = 0;
+	for (j = 0; j < SNMP_MAX_BINDINGS; ++j) {
 
-		processed = 0;
+		if (!req->callbacks[j].func)
+			continue;
+
 		rvalue = &(req->pdu.bindings[j]);
+		processed = 0;
 
 		/* ... dig out matching value from response */
 		for (i = 0; i < pdu->nbindings; ++i) {
@@ -455,37 +482,32 @@ request_get_dispatch (struct request* req, struct snmp_pdu* pdu)
 			if (asn_compare_oid (&(rvalue->var), &(pvalue->var)) != 0)
 				continue;
 
-			if (req->callbacks[j].func)
-				(req->callbacks[j].func) (req->id, SNMP_ERR_NOERROR,
-				                          pvalue, req->callbacks[j].arg);
+			(req->callbacks[j].func) (MAKE_REQUEST_ID (req->snmp_id, j),
+			                          SNMP_ERR_NOERROR, pvalue, req->callbacks[j].arg);
 
+			/*
+			 * Request could have been freed by the callback, by calling the cancel
+			 * function, check and bail if so.
+			 */
+			if (hsh_get (snmp_processing, &req->snmp_id, sizeof (req->snmp_id)) != req)
+				return;
+
+			req->callbacks[j].func = NULL;
 			processed = 1;
 			break;
 		}
 
-		/* If this one was processed, remove from request */
-		if (processed) {
-			last = --req->pdu.nbindings;
-
-			ASSERT (last >= 0);
-			if (last) {
-				memcpy (&req->callbacks[j], &req->callbacks[last], sizeof (req->callbacks[j]));
-				memcpy (&req->pdu.bindings[j], &req->pdu.bindings[last], sizeof (req->pdu.bindings[j]));
-			}
-			memset (&req->callbacks[last], 0, sizeof (req->callbacks[last]));
-			memset (&req->pdu.bindings[last], 0, sizeof (req->pdu.bindings[last]));
-
-			/* Process this index again, since we have a new request here */
-			--j;
-		}
+		/* Make note that we didn't find a match for at least one binding */
+		if (!processed && !skipped)
+			skipped = 1;
 	}
 
 	/* All done? then remove request */
-	if (req->pdu.nbindings == 0) {
+	if (!skipped) {
 
-		log_debug ("request #%d is complete", req->id);
+		log_debug ("request #%d is complete", req->snmp_id);
 
-		val = hsh_rem (snmp_processing, &req->id, sizeof (req->id));
+		val = hsh_rem (snmp_processing, &req->snmp_id, sizeof (req->snmp_id));
 		ASSERT (val == req);
 		request_release (req);
 	}
@@ -498,7 +520,7 @@ request_other_dispatch (struct request* req, struct snmp_pdu* pdu)
 
 	ASSERT (req);
 	ASSERT (pdu);
-	ASSERT (req->id == pdu->request_id);
+	ASSERT (req->snmp_id == pdu->request_id);
 	ASSERT (pdu->error_status == SNMP_ERR_NOERROR);
 	ASSERT (req->pdu.type != SNMP_PDU_GET);
 
@@ -520,12 +542,12 @@ request_other_dispatch (struct request* req, struct snmp_pdu* pdu)
 	ASSERT (req->pdu.nbindings == 1);
 
 	if (req->callbacks[0].func)
-		(req->callbacks[0].func) (req->id, SNMP_ERR_NOERROR,
+		(req->callbacks[0].func) (MAKE_REQUEST_ID (req->snmp_id, 0), SNMP_ERR_NOERROR,
 				          &(pdu->bindings[0]), req->callbacks[0].arg);
 
-	log_debug ("request #%d is complete", req->id);
+	log_debug ("request #%d is complete", req->snmp_id);
 
-	val = hsh_rem (snmp_processing, &req->id, sizeof (req->id));
+	val = hsh_rem (snmp_processing, &req->snmp_id, sizeof (req->snmp_id));
 	ASSERT (val == req);
 	request_release (req);
 }
@@ -573,7 +595,7 @@ request_response (int fd, int type, void* arg)
 	id = pdu.request_id;
 	req = hsh_get (snmp_processing, &id, sizeof (id));
 	if(!req) {
-		log_debug ("received extra or delayed packet from: %s", hostname);
+		log_debug ("received extra, cancelled or delayed packet from: %s", hostname);
 		return;
 	}
 
@@ -583,7 +605,7 @@ request_response (int fd, int type, void* arg)
 
 	/* Log any errors */
 	if(pdu.error_status == SNMP_ERR_NOERROR) {
-		log_debug ("response to request #%d from: %s", req->id, hostname);
+		log_debug ("response to request #%d from: %s", req->snmp_id, hostname);
 
 		if (req->pdu.type == SNMP_PDU_GET)
 			request_get_dispatch (req, &pdu);
@@ -593,9 +615,9 @@ request_response (int fd, int type, void* arg)
 	} else {
 		msg = snmp_get_errmsg (pdu.error_status);
 		if(msg)
-			log_debug ("failure for request #%d from: %s: %s", req->id, hostname, msg);
+			log_debug ("failure for request #%d from: %s: %s", req->snmp_id, hostname, msg);
 		else
-			log_debug ("failure for request #%d from: %s: %d", req->id, hostname,
+			log_debug ("failure for request #%d from: %s: %d", req->snmp_id, hostname,
 			           pdu.error_status);
 		request_failure (req, pdu.error_status);
 	}
@@ -641,7 +663,7 @@ request_flush (struct request *req, mstime when)
 
 	ASSERT (req->host->prepared == req);
 
-	val = hsh_rem (snmp_preparing, &req->id, sizeof (req->id));
+	val = hsh_rem (snmp_preparing, &req->snmp_id, sizeof (req->snmp_id));
 	ASSERT (val == req);
 
 	/* Don't let us add more onto this request via the host */
@@ -651,7 +673,7 @@ request_flush (struct request *req, mstime when)
 	/* Mark this packet to be sent now */
 	req->next_send = when;
 
-	if (!hsh_set (snmp_processing, &req->id, sizeof (req->id), req)) {
+	if (!hsh_set (snmp_processing, &req->snmp_id, sizeof (req->snmp_id), req)) {
 		log_errorx ("out of memory, discarding packets");
 		request_release (req);
 	}
@@ -698,7 +720,7 @@ request_prep_instance (struct host *host, mstime interval, mstime timeout, int r
 	/* See if we have one we can piggy back onto */
 	req = host->prepared;
 	if (req) {
-		ASSERT (hsh_get (snmp_preparing, &req->id, sizeof (req->id)));
+		ASSERT (hsh_get (snmp_preparing, &req->snmp_id, sizeof (req->snmp_id)));
 
 		/* We have one we can piggy back another request onto */
 		if (req->pdu.nbindings < SNMP_MAX_BINDINGS && req->pdu.type == reqtype)
@@ -719,10 +741,14 @@ request_prep_instance (struct host *host, mstime interval, mstime timeout, int r
 	}
 
 	/* Assign the unique id */
-	req->id = snmp_request_id++;
+	req->snmp_id = snmp_request_id++;
+
+	/* Roll around after a decent amount of ids */
+	if (snmp_request_id >= 0xFFFFFF)
+		snmp_request_id = 1;
 
 	/* Mark it down as something we want to prepare */
-	if (!hsh_set (snmp_preparing, &req->id, sizeof (req->id), req)) {
+	if (!hsh_set (snmp_preparing, &req->snmp_id, sizeof (req->snmp_id), req)) {
 		log_error ("out of memory");
 		free (req);
 		return NULL;
@@ -730,7 +756,7 @@ request_prep_instance (struct host *host, mstime interval, mstime timeout, int r
 
         /* Setup the packet */
         strlcpy (req->pdu.community, host->community, sizeof (req->pdu.community));
-        req->pdu.request_id = req->id;
+        req->pdu.request_id = req->snmp_id;
         req->pdu.version = host->version;
         req->pdu.type = reqtype;
         req->pdu.error_status = 0;
@@ -749,7 +775,7 @@ request_prep_instance (struct host *host, mstime interval, mstime timeout, int r
 	ASSERT (host->prepared == NULL);
         host->prepared = req;
 
-        log_debug ("preparing request #%d for: %s@%s", req->id,
+        log_debug ("preparing request #%d for: %s@%s", req->snmp_id,
                    req->host->community, req->host->hostname);
 
 	return req;
@@ -762,6 +788,9 @@ snmp_engine_request (const char *hostname, const char *community, int version,
 {
 	struct host *host;
 	struct request *req;
+	int callback_id;
+
+	ASSERT (func);
 
 	/* Lookup host for request */
 	host = host_instance (hostname, community, version, interval);
@@ -776,10 +805,11 @@ snmp_engine_request (const char *hostname, const char *community, int version,
 	ASSERT (req->pdu.nbindings < SNMP_MAX_BINDINGS);
 
 	/* Add the oid to that request */
-        req->pdu.bindings[req->pdu.nbindings].var = *oid;
-        req->pdu.bindings[req->pdu.nbindings].syntax = SNMP_SYNTAX_NULL;
-        req->callbacks[req->pdu.nbindings].func = func;
-        req->callbacks[req->pdu.nbindings].arg = arg;
+	callback_id = req->pdu.nbindings;
+        req->pdu.bindings[callback_id].var = *oid;
+        req->pdu.bindings[callback_id].syntax = SNMP_SYNTAX_NULL;
+        req->callbacks[callback_id].func = func;
+        req->callbacks[callback_id].arg = arg;
         req->pdu.nbindings++;
 
         /* All other than GET, only get one binding */
@@ -788,39 +818,62 @@ snmp_engine_request (const char *hostname, const char *community, int version,
         	request_flush (req, server_get_time ());
         }
 
-        if (!snmp_flush_pending) {
+        /* Otherwise flush on the idle callback */
+        else if (!snmp_flush_pending) {
         	server_oneshot (0, request_flush_cb, NULL);
         	snmp_flush_pending = 1;
         }
 
-        return req->id;
+        return MAKE_REQUEST_ID (req->snmp_id, callback_id);
 }
 
 void
-snmp_engine_cancel (int reqid)
+snmp_engine_cancel (int id)
 {
 	struct request *req;
+	int snmp_id, callback_id, i;
+	const char *during;
+
+	ASSERT (id);
+
+	snmp_id = REQUEST_ID_SNMP (id);
+	callback_id = REQUEST_ID_CB (id);
+
+	ASSERT (snmp_id > 0 && snmp_id < 0xFFFFFF);
+	ASSERT (callback_id >= 0 && callback_id < SNMP_MAX_BINDINGS);
 
 	/* Is it being processed? */
-	req = hsh_rem (snmp_processing, &reqid, sizeof (reqid));
+	req = hsh_rem (snmp_processing, &snmp_id, sizeof (snmp_id));
 	if (req) {
-		log_debug ("cancelling request #%d during processing", reqid);
-		request_release (req);
-		return;
-	}
+		during = "processing";
 
 	/* Is it being prepared? */
-	req = hsh_rem (snmp_preparing, &reqid, sizeof (reqid));
-	if (req) {
-
-		/* Remove it from the host in question */
-		ASSERT (req->host->prepared == req);
-		req->host->prepared = NULL;
-
-		log_debug ("cancelling request #%d during prep", reqid);
-		request_release (req);
-		return;
+	} else {
+		req = hsh_rem (snmp_preparing, &snmp_id, sizeof (snmp_id));
+		if (req) {
+			during = "prep";
+			ASSERT (req->host->prepared == req);
+		}
 	}
+
+	if (!req)
+		return;
+
+	/* Remove this callback from the request */
+	req->callbacks[callback_id].func = NULL;
+	req->callbacks[callback_id].arg = NULL;
+
+	/* See if any callbacks exist in the request */
+	for (i = 0; i < SNMP_MAX_BINDINGS; ++i) {
+		if (req->callbacks[i].func)
+			return;
+	}
+
+	/* If not, free the request */
+	log_debug ("cancelling request #%d during %s", snmp_id, during);
+	if (req->host->prepared == req)
+		req->host->prepared = NULL;
+	request_release (req);
 }
 
 void

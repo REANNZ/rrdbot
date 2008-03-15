@@ -72,6 +72,7 @@ typedef struct _rb_item
 
     /* The oid that we are querying */
     struct asn_oid field_oid;
+    int field_request;
 
     /* Host names, with alternate hosts */
     #define MAX_HOSTNAMES 16
@@ -83,8 +84,10 @@ typedef struct _rb_item
     int has_query;
     struct asn_oid query_oid;
     const char* query_match;
-    asn_subid_t query_last;
-    int query_value;
+    int query_matched;
+    int query_searched;
+    struct asn_oid query_last;
+    int query_request;
 
     /* The last value / current request */
     union
@@ -97,9 +100,6 @@ typedef struct _rb_item
     #define VALUE_REAL  1
     #define VALUE_FLOAT 2
     int vtype;
-
-    /* A request in progress */
-    int request;
 
     /* Pointers to related */
     struct _rb_poller* poller;
@@ -122,6 +122,9 @@ typedef struct _rb_poller
 
     /* The things to poll. rb_poller owns this list */
     rb_item* items;
+
+    /* Polling is active */
+    int polling;
 
     /* Book keeping */
     mstime last_request;
