@@ -1,7 +1,8 @@
 0.9 ?????
     - Support failover between multiple agents.
     - Support table queries by looking up table indexes.
-    - Major refactoring of internals. 
+    - Major refactoring of internals.
+    - Warn and ignore MIBs that we don't recognize. 
     
 0.8  [2007-07-16]
     - Fix assertion when reallocating SNMP request memory

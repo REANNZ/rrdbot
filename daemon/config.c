@@ -215,17 +215,20 @@ parse_query (rb_item *item, char *query, config_ctx *ctx)
 	if (query && *query)
 		log_warnx ("%s: only using first query argument in snmp URI", ctx->confname);
 
-	item->has_query = 1;
-
 	/* And parse the query OID */
-	if (mib_parse (name, &(item->query_oid)) == -1)
-		errx (2, "%s: invalid MIB: %s", ctx->confname, name);
-	if (item->query_oid.len >= ASN_MAXOIDLEN)
-		errx (2, "request OID is too long");
+	if (mib_parse (name, &(item->query_oid)) == -1) {
+		log_warnx ("%s: ignorning invalid MIB: %s", ctx->confname, name);
+		return;
+	}
+	if (item->query_oid.len >= ASN_MAXOIDLEN) {
+		log_warnx ("%s: ignoring OID that is too long: %s", ctx->confname, name);
+		return;
+	}
 
 	log_debug ("parsed MIB into oid: %s -> %s", name,
 	           asn_oid2str (&item->query_oid));
 
+	item->has_query = 1;
 	item->query_match = value;
 	memset (&item->query_last, 0, sizeof (item->query_last));
 	item->query_matched = 0;
@@ -257,6 +260,21 @@ parse_item (const char *field, char *uri, config_ctx *ctx)
 
 	/* Make a new item */
 	item = (rb_item*)xcalloc (sizeof (*item));
+
+	/* And parse the main field OID */
+	if (mib_parse (path, &(item->field_oid)) == -1) {
+		log_warnx ("%s: ignorning invalid MIB: %s", ctx->confname, path);
+		free (item);
+		return NULL;
+	}
+
+	if (item->field_oid.len >= ASN_MAXOIDLEN) {
+		log_warnx ("%s: ignoring OID that is too long: %s", ctx->confname, path);
+		free (item);
+		return NULL;
+	}
+
+	/* Setup the basics */
 	item->field = field;
 	item->community = user ? user : "public";
 	item->version = version;
@@ -267,12 +285,6 @@ parse_item (const char *field, char *uri, config_ctx *ctx)
 	/* Parse the hosts, query */
 	parse_hosts (item, host, ctx);
 	parse_query (item, query, ctx);
-
-	/* And parse the main field OID */
-	if (mib_parse (path, &(item->field_oid)) == -1)
-		errx (2, "%s: invalid MIB: %s", ctx->confname, path);
-	if (item->field_oid.len >= ASN_MAXOIDLEN)
-		errx (2, "request OID is too long");
 
 	log_debug ("parsed MIB into oid: %s -> %s", path,
 	           asn_oid2str (&item->field_oid));
