@@ -312,29 +312,34 @@ process_query (void)
 	memset (&value, 0, sizeof (value));
 	memset (&match, 0, sizeof (match));
 
-	/* Loop looking for the value */
-	for (sub = 0; ; ++sub) {
+	/* Build up the query OID we're going for */
+	memcpy (&value.var, &ctx.query_oid, sizeof (value.var));
+	ASSERT (value.var.len < ASN_MAXOIDLEN);
 
-		/* Build up the query OID we're going for */
-		memcpy (&value.var, &ctx.query_oid, sizeof (value.var));
-		ASSERT (value.var.len < ASN_MAXOIDLEN);
-		value.var.subs[value.var.len] = sub;
-		value.var.len++;
+	/* Loop looking for the value */
+	for (;;) {
 
 		/* Do the request */
 		ret = snmp_engine_sync (ctx.host, ctx.community, ctx.version,
-		                        0, ctx.timeout, SNMP_PDU_GET, &value);
+		                        0, ctx.timeout, SNMP_PDU_GETNEXT, &value);
 
-		/* Try and see if its not zero based */
-		if (ret == SNMP_ERR_NOSUCHNAME && sub == 0)
-			continue;
+		/* Convert these result codes into 'not found' */
+		if (ret == SNMP_ERR_NOERROR) {
+			switch (value.syntax) {
+			case SNMP_SYNTAX_NOSUCHOBJECT:
+			case SNMP_SYNTAX_NOSUCHINSTANCE:
+			case SNMP_SYNTAX_ENDOFMIBVIEW:
+				ret = SNMP_ERR_NOSUCHNAME;
+				break;
+			default:
+				break;
+			}
+		}
 
 		if (ret != SNMP_ERR_NOERROR) {
 			had_failure (ret);
 			return;
 		}
-
-		matched = 0;
 
 		/* Match the results */
 		if (ctx.query_match)
@@ -344,12 +349,14 @@ process_query (void)
 		else
 			matched = 1;
 
-		snmp_value_clear (&value);
-
 		if (matched)
 			break;
 	}
 
+	/* The last one is the table index */
+	sub = value.var.subs[value.var.len];
+
+	/* Build up the field OID */
 	memcpy (&value.var, &ctx.request_oid, sizeof (value.var));
 	ASSERT (value.var.len < ASN_MAXOIDLEN);
 	value.var.subs[value.var.len] = sub;
