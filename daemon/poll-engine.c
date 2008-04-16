@@ -40,6 +40,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <ctype.h>
 #include <errno.h>
 #include <err.h>
 
@@ -163,6 +164,48 @@ finish_poll (rb_poller *poll, mstime when)
 	poll->polling = 0;
 }
 
+static int
+parse_string_value (struct snmp_value *value, rb_item *item)
+{
+	char buf[256];
+	char *t, *b;
+
+	ASSERT (value);
+	ASSERT (value->syntax == SNMP_SYNTAX_OCTETSTRING);
+	ASSERT (item);
+
+	if(value->v.octetstring.len >= sizeof(buf))
+		return 0;
+
+	memset(buf, 0, sizeof(buf));
+	strncpy(buf, (char*)value->v.octetstring.octets, value->v.octetstring.len);
+
+	/* Remove leading spaces */
+	b = buf;
+	while(isspace(*b))
+		++b;
+
+	/* Cannot parse empty strings */
+	if(!*b)
+		return 0;
+
+	/* Try to parse the string into an integer */
+	item->v.i_value = strtoll(b, &t, 10);
+	if(!*t || isspace(*t)) {
+		item->vtype = VALUE_REAL;
+		return 1;
+	}
+
+	/* Try to parse the string into a floating point */
+	item->v.f_value = strtod(b, &t);
+	if(!*t || isspace(*t)) {
+		item->vtype = VALUE_FLOAT;
+		return 1;
+	}
+
+	return 0;
+}
+
 static void
 field_response (int request, int code, struct snmp_value *value, void *arg)
 {
@@ -200,9 +243,14 @@ field_response (int request, int code, struct snmp_value *value, void *arg)
 			item->vtype = VALUE_REAL;
 			break;
 		case SNMP_SYNTAX_OCTETSTRING:
+			if (!parse_string_value(value, item))
+				msg = "snmp server returned non numeric value for field: %s";
+			break;
 		case SNMP_SYNTAX_OID:
+			msg = "snmp server returned a oid value for field: %s";
+			break;
 		case SNMP_SYNTAX_IPADDRESS:
-			msg = "snmp server returned non numeric value for field: %s";
+			msg = "snmp server returned a ip address value for field: %s";
 			break;
 		case SNMP_SYNTAX_NOSUCHOBJECT:
 		case SNMP_SYNTAX_NOSUCHINSTANCE:
