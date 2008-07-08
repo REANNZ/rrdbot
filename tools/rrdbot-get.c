@@ -213,10 +213,10 @@ print_result (struct snmp_value* value)
 	case SNMP_SYNTAX_COUNTER:
 	case SNMP_SYNTAX_GAUGE:
 	case SNMP_SYNTAX_TIMETICKS:
-		printf ("%d\n", value->v.uint32);
+		printf ("%u\n", value->v.uint32);
 		break;
 	case SNMP_SYNTAX_COUNTER64:
-		printf ("%lld\n", value->v.counter64);
+		printf ("%llu\n", value->v.counter64);
 		break;
 	case SNMP_SYNTAX_OCTETSTRING:
 		t = xcalloc (value->v.octetstring.len + 1);
@@ -354,7 +354,7 @@ process_query (void)
 	}
 
 	/* The last one is the table index */
-	sub = value.var.subs[value.var.len];
+	sub = value.var.subs[value.var.len - 1];
 
 	/* Build up the field OID */
 	memcpy (&value.var, &ctx.request_oid, sizeof (value.var));
