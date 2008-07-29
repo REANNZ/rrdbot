@@ -413,6 +413,7 @@ version()
 int
 main (int argc, char* argv[])
 {
+	char *bind_address = NULL;
 	char ch;
 	char* t;
 
@@ -421,7 +422,7 @@ main (int argc, char* argv[])
 	ctx.timeout = DEFAULT_TIMEOUT;
 
 	/* Parse the arguments nicely */
-	while ((ch = getopt (argc, argv, "m:Mnrt:vV")) != -1) {
+	while ((ch = getopt (argc, argv, "m:Mnrs:t:vV")) != -1) {
 		switch (ch)
 		{
 
@@ -443,6 +444,11 @@ main (int argc, char* argv[])
 		/* SNMP walk (recursive)*/
 		case 'r':
 			ctx.recursive = 1;
+			break;
+
+		/* local source address */
+		case 's':
+			bind_address = optarg;
 			break;
 
 		/* The timeout */
@@ -478,7 +484,7 @@ main (int argc, char* argv[])
 		usage ();
 
 	server_init ();
-    	snmp_engine_init (MAX_RETRIES);
+    	snmp_engine_init (bind_address, MAX_RETRIES);
 
     	parse_argument (argv[0]);
 

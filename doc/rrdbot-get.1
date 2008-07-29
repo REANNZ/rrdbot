@@ -44,6 +44,7 @@
 .Nm
 .Op Fl Mnr
 .Op Fl m Ar mibdir
+.Op Fl s Ar srcaddr
 .Op Fl t Ar timeout
 .Ar snmp://community@host/oid
 .Nm 
@@ -68,6 +69,8 @@ Display MIB parsing warnings.
 Display numeric OIDs.
 .It Fl r
 Recursively walk the SNMP values under the given OID.
+.It Fl s Ar srcaddr
+Source address to send SNMP packets from.
 .It Fl t Ar timeout
 The amount of time (in seconds) to wait for an SNMP response. Defaults to 
 5 seconds.

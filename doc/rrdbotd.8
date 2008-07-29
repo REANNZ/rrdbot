@@ -43,6 +43,7 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl M
+.Op Fl b Ar bindaddr
 .Op Fl c Ar confdir
 .Op Fl w Ar workdir
 .Op Fl m Ar mibdir
@@ -72,6 +73,8 @@ configuration files are described in:
 .Sh OPTIONS
 The options are as follows. 
 .Bl -tag -width Fl
+.It Fl b Ar bindaddr
+Address to bind to and send SNMP packets from.
 .It Fl c Ar confdir
 The directory in which configuration files are stored. See below for info
 on the various file locations.

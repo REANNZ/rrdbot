@@ -205,6 +205,7 @@ int
 main(int argc, char* argv[])
 {
     const char* pidfile = NULL;
+    const char *bind_address = NULL;
     int daemonize = 1;
     char ch;
     char* t;
@@ -223,10 +224,15 @@ main(int argc, char* argv[])
     g_state.timeout = DEFAULT_TIMEOUT;
 
     /* Parse the arguments nicely */
-    while((ch = getopt(argc, argv, "c:d:m:Mp:r:t:w:V")) != -1)
+    while((ch = getopt(argc, argv, "b:c:d:m:Mp:r:t:w:V")) != -1)
     {
         switch(ch)
         {
+
+        /* Bind address */
+        case 'b':
+            bind_address = optarg;
+            break;
 
         /* Config directory */
         case 'c':
@@ -305,7 +311,7 @@ main(int argc, char* argv[])
     mib_uninit();
 
     /* Rev up the main engine */
-    snmp_engine_init(3);
+    snmp_engine_init(bind_address, 3);
     rb_poll_engine_init();
 
     if(daemonize)

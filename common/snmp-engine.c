@@ -940,9 +940,9 @@ snmp_engine_sync (const char* host, const char* community, int version,
  */
 
 void
-snmp_engine_init (int retries)
+snmp_engine_init (const char *bindaddr, int retries)
 {
-	struct sockaddr_in addr;
+	struct sockaddr_any addr;
 
 	snmp_retries = retries;
 
@@ -954,16 +954,18 @@ snmp_engine_init (int retries)
 	if (!snmp_preparing)
 		err (1, "out of memory");
 
+	memset (&addr, 0, sizeof(addr));
+	if (!bindaddr)
+		bindaddr = "0.0.0.0";
+	if (sock_any_pton (bindaddr, &addr, SANY_OPT_DEFPORT (0) | SANY_OPT_DEFANY) < 0)
+		err (1, "couldn't parse bind address: %s", bindaddr);
+
 	ASSERT (snmp_socket == -1);
-	snmp_socket = socket (PF_INET, SOCK_DGRAM, 0);
+	snmp_socket = socket (SANY_TYPE (addr), SOCK_DGRAM, 0);
 	if (snmp_socket < 0)
 		err (1, "couldn't open snmp socket");
 
-	/* Get a random IPv4 UDP socket for client use */
-	memset (&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-
-	if (bind (snmp_socket, (struct sockaddr*)&addr, sizeof (addr)) < 0)
+	if (bind (snmp_socket, &SANY_ADDR (addr), SANY_LEN (addr)) < 0)
 		err (1, "couldn't listen on port");
 
 	if (server_watch (snmp_socket, SERVER_READ, request_response, NULL) == -1)

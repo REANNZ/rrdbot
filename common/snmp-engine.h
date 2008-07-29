@@ -6,7 +6,7 @@
 
 typedef void (*snmp_response) (int request, int code, struct snmp_value *value, void *data);
 
-void snmp_engine_init (int retries);
+void snmp_engine_init (const char *bind_address, int retries);
 
 int  snmp_engine_request (const char* host, const char* community, int version,
                           uint64_t interval, uint64_t timeout, int reqtype,
