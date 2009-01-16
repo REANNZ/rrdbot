@@ -53,6 +53,6 @@ void mib_init();
 void mib_uninit();
 
 int mib_parse(const char* mib, struct asn_oid* oid);
-int mib_format(struct asn_oid* oid, FILE* f);
+int mib_format(struct asn_oid* oid, FILE* f, int verbose);
 
 #endif /* __MIB_PARSER_H__ */

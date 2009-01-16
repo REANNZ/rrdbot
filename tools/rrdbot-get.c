@@ -199,7 +199,7 @@ print_result (struct snmp_value* value)
 	if (ctx.numeric)
 		printf ("%s", asn_oid2str (&value->var));
 	else
-		mib_format (&value->var, stdout);
+		mib_format (&value->var, stdout, ctx.verbose);
 
 	printf(": ");
 
@@ -398,8 +398,8 @@ process_simple (void)
 static void
 usage()
 {
-    fprintf(stderr, "usage: rrdbot-get [-Mnrv] [-t timeout] [-m mibdir] snmp://community@host/oid\n");
-    fprintf(stderr, "       rrdbot-get -V\n");
+    fprintf(stderr, "usage: rrdbot-get -V\n");
+    fprintf(stderr, "       rrdbot-get [-Mnrv] [-t timeout] [-m mibdir] [-s srcaddr] snmp://community@host/oid\n");
     exit(2);
 }
 

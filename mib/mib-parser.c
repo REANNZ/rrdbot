@@ -380,14 +380,54 @@ mib_parse(const char* mib, struct asn_oid* oid)
 }
 
 int
-mib_format(struct asn_oid* oid, FILE* f)
+mib_format(struct asn_oid* oid, FILE* f, int verbose)
 {
+    extern struct module *module_head;
     extern struct tree *tree_head;
+    struct module *mp = NULL;
     struct tree *tp = NULL;
     asn_subid_t subid;
-    int i;
+    int module;
+    int i, start = 0;
 
     mib_init();
+
+    if(!verbose)
+    {
+        module = -1;
+
+        /* Search for the last module the OID is part of */
+        for(i = 0, tp = tree_head; tp && i < oid->len;
+            i++, tp = tp ? tp->child_list : NULL)
+        {
+            subid = oid->subs[i];
+
+            while(tp && tp->subid != subid)
+                tp = tp->next_peer;
+
+            if(!tp)
+                break;
+
+            if(module == -1 || tp->modid != module) {
+                module = tp->modid;
+                start = i + 1;
+            }
+        }
+
+        /* Print out the last module found */
+        if(module != -1) {
+            for (mp = module_head; mp; mp = mp->next) {
+                if (mp->modid == module && mp->name) {
+                    fprintf(f, "%s::", mp->name);
+                    module = -1;
+                    break;
+                }
+            }
+
+            if(module != -1)
+                start = 0;
+        }
+    }
 
     for(i = 0, tp = tree_head; tp && i < oid->len;
         i++, tp = tp ? tp->child_list : NULL)
@@ -400,11 +440,14 @@ mib_format(struct asn_oid* oid, FILE* f)
         if(!tp)
             break;
 
-        fprintf(f, ".%s", tp->label);
+        /* Skip until the module we found above */
+        if(i >= start)
+            fprintf(f, "%s%s", i > start ? "." : "", tp->label);
     }
 
+    /* Print out anything not in the mib */
     for( ; i < oid->len; i++)
-        fprintf(f, ".%d", (int)(oid->subs[i]));
+        fprintf(f, "%s%d", i > start ? "." : "", (int)(oid->subs[i]));
 
     return 0;
 }
