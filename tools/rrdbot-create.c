@@ -74,6 +74,10 @@
 #define VAL_MIN         "MIN"
 #define VAL_MAX         "MAX"
 #define VAL_LAST        "LAST"
+#define FLAG_AVERAGE	0x01
+#define FLAG_MIN    	0x02
+#define FLAG_MAX    	0x04
+#define FLAG_LAST    	0x08
 
 #define VAL_SECOND      "second"
 #define VAL_SECONDS     "seconds"
@@ -137,7 +141,7 @@ typedef struct _create_ctx
     const char* confname;
     const char* rrdname;
     uint interval;
-    const char *cf;
+    int cfs;
     int create;
     int skip;
 
@@ -211,7 +215,7 @@ context_reset(create_ctx* ctx)
     }
 
     ctx->confname = NULL;
-    ctx->cf = VAL_AVERAGE;
+    ctx->cfs = FLAG_AVERAGE;
     ctx->interval = 0;
 
     ctx->create = 0;
@@ -316,8 +320,9 @@ create_file(create_ctx* ctx, const char* rrd)
     field_arg* field;
     int nargs = 0;
     uint rows, steps;
-    int argc, r;
+    int argc, r, cfs;
     const char** argv;
+    char *val_cf;
 
     if(!ctx->interval)
     {
@@ -347,14 +352,32 @@ create_file(create_ctx* ctx, const char* rrd)
             continue;
         }
         rows = rra->total / (ctx->interval * steps);
-
-        arg = (create_arg*)xcalloc(sizeof(create_arg));
-        snprintf(arg->buf, sizeof(arg->buf), "RRA:%s:0.6:%d:%d",
-                 ctx->cf, steps, rows);
-        arg->buf[sizeof(arg->buf) - 1] = 0;
-        arg->next = args;
-        args = arg;
-        nargs++;
+	cfs = ctx->cfs;
+	while (cfs) {
+            arg = (create_arg*)xcalloc(sizeof(create_arg));
+	    if (cfs & FLAG_AVERAGE) {
+                val_cf = VAL_AVERAGE;
+		cfs &= ~FLAG_AVERAGE;
+	    }
+	    else if (cfs & FLAG_MIN) {
+                val_cf = VAL_MIN;
+		cfs &= ~FLAG_MIN;
+	    }
+	    else if (cfs & FLAG_MAX) {
+                val_cf = VAL_MAX;
+		cfs &= ~FLAG_MAX;
+	    }
+	    else {
+                val_cf = VAL_LAST;
+		cfs &= ~FLAG_LAST;
+	    }
+            snprintf(arg->buf, sizeof(arg->buf), "RRA:%s:0.6:%d:%d",
+                 val_cf, steps, rows);
+            arg->buf[sizeof(arg->buf) - 1] = 0;
+            arg->next = args;
+            args = arg;
+            nargs++;
+	}
     }
 
     if(!nargs)
@@ -511,6 +534,37 @@ unit_to_seconds(char* unit)
         return 31536000;
     else
         return 0;
+}
+
+static int
+add_cfs(create_ctx* ctx, char* value)
+{
+    char* t;
+    int cfs = 0;
+
+    while(value && *value)
+    {
+        /* Skip any delimiters, and parse next */
+	value = value + strspn(value, " \t,");
+	t = strchr(value, ',');
+	if(t)
+            *(t++) = 0;
+	strtrim(value);
+	if (strcmp(value, VAL_AVERAGE) == 0)
+	    cfs |= FLAG_AVERAGE;
+	else if (strcmp(value, VAL_MIN) == 0)
+	    cfs |= FLAG_MIN;
+	else if (strcmp(value, VAL_MAX) == 0)
+	    cfs |= FLAG_MAX;
+	else if (strcmp(value, VAL_LAST) == 0)
+	    cfs |= FLAG_LAST;
+	else {
+            warnx("%s: invalid 'cf' value: %s", ctx->confname, value);
+	    return -1;
+	}
+	value = t;
+    }
+    return cfs;
 }
 
 static int
@@ -679,18 +733,15 @@ cfg_value(const char* filename, const char* header, const char* name,
     if(strcmp(name, CONFIG_CF) == 0)
     {
         strupr(value);
-        if(strcmp(value, VAL_AVERAGE) == 0 ||
-           strcmp(value, VAL_MIN) == 0 ||
-           strcmp(value, VAL_MAX) == 0 ||
-           strcmp(value, VAL_LAST) == 0)
-        {
-            ctx->cf = value;
-        }
-        else
-        {
-            warnx("%s: invalid 'cf' value: %s", ctx->confname, value);
+	int cfs = add_cfs(ctx, value);
+	if(cfs < 0)
+	{
             ctx->skip = 1;
         }
+	else
+	{
+	    ctx->cfs = cfs;
+	}
 
         ctx->create = 0;
         return 0;

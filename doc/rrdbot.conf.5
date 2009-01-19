@@ -160,8 +160,9 @@ The example below describes three archives of "2 per minute for 1 week",
 rrdbot-create 8
 ]
 .It Ar cf
-This is the consolidation function to use to consolidate RRD values when 
-archiving them. This applies to all fields in the RRD. The valid settings are:
+The consolidation functions to use to consolidate RRD values when 
+archiving them. This applies to all fields in the RRD. There can be multiple
+functions specified, separated by commas. The valid functions are:
 .Bl -tag -width Fl
 .It Ar AVERAGE 
 Average out the values when archiving them.

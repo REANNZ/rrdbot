@@ -1,3 +1,6 @@
+0.9.4  [2009-01-19]
+    - Add support for creating multiple CFs in rrdbot-create. [Stoned Elipot]
+
 0.9.3  [2009-01-16]
     - Add support for printing out MIB name in rrdbot-get
     
