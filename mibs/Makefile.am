@@ -27,9 +27,11 @@ mib_DATA = \
     IPV6-TC.txt \
     IPV6-TCP-MIB.txt \
     IPV6-UDP-MIB.txt \
+    JAILS-MIB.txt \
     LM-SENSORS-MIB.txt \
     NOTIFICATION-LOG-MIB.txt \
     OSPF-MIB.txt \
+    PCAP-MIB.txt \
     REGEX-MIB.txt \
     RFC1155-SMI.txt \
     RFC1213-MIB.txt \
