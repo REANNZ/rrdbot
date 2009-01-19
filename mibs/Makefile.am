@@ -53,6 +53,7 @@ mib_DATA = \
     SNMP-VIEW-BASED-ACM-MIB.txt \
     SOURCE-ROUTING-MIB.txt \
     TCP-MIB.txt \
+    UCD-SNMP-MIB.txt \
     UDP-MIB.txt
 
 EXTRA_DIST = $(mib_DATA)
