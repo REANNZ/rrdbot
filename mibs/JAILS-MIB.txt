@@ -37,7 +37,7 @@ jails MODULE-IDENTITY
     CONTACT-INFO "stef@memberwebs.com"
     DESCRIPTION "The MIB for the bsnmp-jail module."
 
-    ::= { begemot 205 }
+    ::= { begemot 1111 }
 
 -- --------------------------------------------------------------------------
 
@@ -75,8 +75,7 @@ JailEntry ::=
 	jailThreads Integer32,
 	jailCpuTime TimeTicks,
 	jailDiskSpace Counter64,
-	jailDiskFiles Counter64,
-	jailResidentSize Counter64
+	jailDiskFiles Counter64
     }
 
 jailIndex OBJECT-TYPE
@@ -155,13 +154,5 @@ jailDiskFiles OBJECT-TYPE
     STATUS current
     DESCRIPTION "Number of files (inodes) in this jail. Zero means unknown."
     ::= { jailEntry 31 }
-
-jailResidentSize OBJECT-TYPE
-    SYNTAX Counter64
-    MAX-ACCESS read-only
-    STATUS current
-    DESCRIPTION "The sum of the resident set size (RSS) of all processes in jail. An inaccurate representation of memory usage of the jail."
-    ::= { jailEntry 40 }
-
 
 END
