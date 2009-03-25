@@ -218,7 +218,7 @@ cfg_parse_file(const char* filename, void* data, char** memory)
         t++;
 
         name = strtrim(p);
-        value = t;
+        value = strtrim(t);
     }
 
     if(name && value)
