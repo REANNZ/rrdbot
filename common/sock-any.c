@@ -36,6 +36,8 @@
  *
  */
 
+#include "config.h"
+
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -84,7 +86,7 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
     /* Fill in the type based on defaults */
 #ifdef HAVE_INET6
     if(opts & SANY_OPT_DEFINET6)
-        any->s.in.sin_family = AF_INET6;
+        any->s.in6.sin6_family = AF_INET6;
     else
 #endif
         any->s.in.sin_family = AF_INET;
@@ -94,7 +96,7 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
     {
 #ifdef HAVE_INET6
         if(opts & SANY_OPT_DEFINET6)
-            memcpy(&(any->s.in.sin6_addr), &in6addr_loopback, sizeof(struct in6_addr));
+            memcpy(&(any->s.in6.sin6_addr), &in6addr_loopback, sizeof(struct in6_addr));
         else
 #endif
             any->s.in.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -164,7 +166,7 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
 #ifdef HAVE_INET6
   do
   {
-    #define IPV6_CHARS  "0123456789:"
+    #define IPV6_CHARS  "0123456789:abcdef"
     #define IPV6_MIN    3
     #define IPV6_MAX    51
 
@@ -176,7 +178,7 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
       break;
 
     /* If it starts with a '[' then we can get port */
-    if(buf[0] == '[')
+    if(addr[0] == '[')
     {
       port = 0;
       addr++;
@@ -198,8 +200,9 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
 
       /* Get the port out */
       t = buf + l + 1;
+      buf[l] = 0;
 
-      if(*t = ':')
+      if(*t == ':')
         t++;
     }
 
@@ -211,9 +214,9 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
     }
 
     any->s.in6.sin6_family = AF_INET6;
-    any->s.in6.sin6_port = htons((unsigned short)port <= 0 : defport : port);
+    any->s.in6.sin6_port = htons((unsigned short)(port <= 0 ? defport : port));
 
-    if(inet_pton(AF_INET6, buf, &(any->s.in6.sin6_addr)) >= 0)
+    if(inet_pton(AF_INET6, buf, &(any->s.in6.sin6_addr)) < 0)
       break;
 
     any->namelen = sizeof(any->s.in6);
@@ -231,7 +234,10 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
 
     l = strlen(addr);
     if(l >= sizeof(any->s.un.sun_path))
+    {
+      errno = ENAMETOOLONG;
       break;
+    }
 
     any->s.un.sun_family = AF_UNIX;
     strcpy(any->s.un.sun_path, addr);
@@ -251,11 +257,17 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
 
     l = strlen(addr);
     if(l >= 255 || !isalpha(addr[0]))
+    {
+      errno = EINVAL;
       break;
+    }
 
     /* Some basic illegal character checks */
     if(strcspn(addr, " /\\") != l)
+    {
+      errno = EINVAL;
       break;
+    }
 
     strcpy(buf, addr);
 
@@ -271,7 +283,10 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
     {
       port = strtol(t, &t2, 10);
       if(*t2 || port <= 0 || port >= 65536)
+      {
+        errno = EDOM;
         break;
+      }
     }
 
     if(!(opts & SANY_OPT_NORESOLV))
@@ -289,7 +304,7 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
     {
        family = SANY_AF_DNS;
 #ifdef HAVE_INET6
-       if(opt & SANY_OPT_DEFINET6)
+       if(opts & SANY_OPT_DEFINET6)
        {
          any->s.a.sa_family = AF_INET6;
          any->namelen = sizeof(any->s.in6);
@@ -325,33 +340,39 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
 
 int sock_any_ntop(const struct sockaddr_any* any, char* addr, size_t addrlen, int opts)
 {
+  char buf[1024];
   int len = 0;
   int port = 0;
+  const char *address = NULL;
+  const char *prefix = "";
+  const char *suffix = "";
 
   switch(any->s.a.sa_family)
   {
   case AF_UNIX:
-    len = strlen(any->s.un.sun_path);
-    if(addrlen < len + 1)
-    {
-      errno = ENOSPC;
-      return -1;
-    }
-
-    strcpy(addr, any->s.un.sun_path);
+    address = any->s.un.sun_path;
     break;
 
   case AF_INET:
-    if(inet_ntop(any->s.a.sa_family, &(any->s.in.sin_addr), addr, addrlen) == NULL)
+    if(inet_ntop(any->s.a.sa_family, &(any->s.in.sin_addr), buf, sizeof(buf)) == NULL)
       return -1;
-    port = ntohs(any->s.in.sin_port);
+    address = buf;
+    if(!(opts & SANY_OPT_NOPORT))
+      port = ntohs(any->s.in.sin_port);
     break;
 
 #ifdef HAVE_INET6
   case AF_INET6:
-    if(inet_ntop(any->s.a.sa_family, &(any->s.in6.sin6_addr), addr, addrlen) == NULL)
+    if(!(opts & SANY_OPT_NOPORT))
+      port = ntohs(any->s.in6.sin6_port);
+    if(inet_ntop(any->s.a.sa_family, &(any->s.in6.sin6_addr), buf, sizeof(buf)) == NULL)
       return -1;
-    port = ntohs(any->s.in6.sin6_port);
+    address = buf;
+    if(port != 0)
+    {
+      prefix = "[";
+      suffix = "]";
+    }
     break;
 #endif
 
@@ -360,16 +381,15 @@ int sock_any_ntop(const struct sockaddr_any* any, char* addr, size_t addrlen, in
     return -1;
   }
 
-  if(!(opts & SANY_OPT_NOPORT) && port != 0)
+  if(port != 0)
+    len = snprintf(addr, addrlen, "%s%s%s:%d", prefix, address, suffix, port);
+  else
+    len = snprintf(addr, addrlen, "%s%s%s", prefix, address, suffix);
+
+  if(len >= addrlen)
   {
-    strncat(addr, ":", addrlen);
-    addr[addrlen - 1] = 0;
-
-    len = strlen(addr);
-    addr += len;
-    addrlen -= len;
-
-    snprintf(addr, addrlen, "%d", port);
+      errno = ENOSPC;
+      return -1;
   }
 
   return 0;

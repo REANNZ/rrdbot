@@ -26,6 +26,16 @@ AC_PROG_CC
 AC_PROG_INSTALL
 AC_PROG_RANLIB
 
+# IPV6 enabled
+AC_ARG_ENABLE(ipv6,
+		AC_HELP_STRING([--disable-ipv6],
+		[Disable IPV6 support]))
+
+if test "$enable_ipv6" != "no"; then
+	AC_DEFINE_UNQUOTED(HAVE_INET6, 1, [Have IPV6 Support])
+	echo "enabling ipv6 support"
+fi
+
 # TODO: Figure out why we need this wierd hack
 ACX_PTHREAD( , [echo "ERROR: Pthread support not found."; exit 1] )
 
