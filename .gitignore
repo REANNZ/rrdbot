@@ -1,0 +1,60 @@
+*.o
+
+# /
+/configure.lineno
+/*.tar.gz
+/depcomp
+/configure
+/Makefile.in
+/Makefile
+/config.log
+/config.status
+/compile
+/stamp-*
+/config.h.*
+/config.h
+/autom4te.cache
+/missing
+/aclocal.m4
+/install-*
+/*.pws
+/*.bak
+/*.prj
+/config.guess
+/config.sub
+
+# /bsnmp/
+/bsnmp/Makefile
+/bsnmp/Makefile.in
+/bsnmp/*.a
+/bsnmp/*.tmp
+/bsnmp/.*
+
+# /common/
+/common/.*
+/common/*.a
+/common/Makefile
+/common/Makefile.in
+
+# /daemon/
+/daemon/.deps
+/daemon/Makefile.in
+/daemon/Makefile
+/daemon/rrdbotd
+/daemon/*.tmp
+
+# /doc/
+/doc/Makefile.in
+/doc/Makefile
+/doc/*.html
+
+# /mibs/
+/mibs/Makefile
+/mibs/Makefile.in
+
+# /tools/
+/tools/.deps
+/tools/rrdbot-create
+/tools/rrdbot-get
+/tools/Makefile
+/tools/Makefile.in
