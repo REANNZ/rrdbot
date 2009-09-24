@@ -1,6 +1,7 @@
 /.*project
 /.settings
 *.o
+/.suppressions
 
 # /
 /configure.lineno
