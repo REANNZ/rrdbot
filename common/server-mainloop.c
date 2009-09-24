@@ -242,7 +242,7 @@ server_uninit()
         free(sockcb);
     }
 
-    ctx.timers = NULL;
+    ctx.callbacks = NULL;
 }
 
 uint64_t
