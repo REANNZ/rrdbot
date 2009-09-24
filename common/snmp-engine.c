@@ -62,6 +62,9 @@ struct request;
 
 typedef uint64_t mstime;
 
+/* Forward declarations */
+static void request_release (struct request *req);
+
 /* ------------------------------------------------------------------------------
  * HOSTS
  */
@@ -295,6 +298,8 @@ host_cleanup (void)
 			free (host->hostname);
 		if (host->community)
 			free (host->community);
+		if (host->prepared)
+			request_release (host->prepared);
 		free (host);
 	}
 
