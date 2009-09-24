@@ -596,6 +596,7 @@ request_response (int fd, int type, void* arg)
 	req = hsh_get (snmp_processing, &id, sizeof (id));
 	if(!req) {
 		log_debug ("received extra, cancelled or delayed packet from: %s", hostname);
+		snmp_pdu_clear (&pdu);
 		return;
 	}
 
@@ -622,6 +623,7 @@ request_response (int fd, int type, void* arg)
 		request_failure (req, pdu.error_status);
 	}
 
+	snmp_pdu_clear (&pdu);
 }
 
 static void
