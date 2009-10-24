@@ -46,6 +46,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <assert.h>
 #include <errno.h>
 #include <unistd.h>
 #include <syslog.h>
