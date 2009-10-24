@@ -375,6 +375,7 @@ const char*
 cfg_parse_uri (char *uri, char** scheme, char** host, char **port,
                char** user, char** path, char** query)
 {
+    size_t len;
     char* t;
 
     *scheme = NULL;
@@ -392,7 +393,7 @@ cfg_parse_uri (char *uri, char** scheme, char** host, char **port,
     *host = strsep(&uri, "/");
 
     /* Parse the community out from the host */
-    if(*host[0])
+    if((*host)[0])
     {
         t = strchr(*host, '@');
         if(t)
@@ -404,7 +405,7 @@ cfg_parse_uri (char *uri, char** scheme, char** host, char **port,
     }
 
     /* Parse out the port from the uri */
-    if(*host[0])
+    if((*host)[0])
     {
         t = strrchr(*host, ':');
         if(t && looks_like_port(t + 1))
@@ -412,6 +413,14 @@ cfg_parse_uri (char *uri, char** scheme, char** host, char **port,
             *t = 0;
             *port = t + 1;
         }
+    }
+
+    /* Remove any brackets from the host */
+    len = strlen (*host);
+    if(len > 2 && (*host)[0] == '[' && (*host)[len - 1] == ']')
+    {
+        (*host)[len - 1] = 0;
+        (*host)++;
     }
 
     if(!*host[0])
