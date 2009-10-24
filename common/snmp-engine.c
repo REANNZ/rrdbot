@@ -73,6 +73,7 @@ struct host {
 	char key[128];
 
 	char *hostname;
+	char *portnum;
 	char *community;
 	int version;
 
@@ -145,7 +146,7 @@ host_resolve (struct host *host, mstime when)
 	log_debug ("resolving host: %s", host->hostname);
 	host->last_resolve_try = when;
 	host->is_resolving = 0;
-	async_resolver_queue (host->hostname, "161", &hints, resolve_cb, host);
+	async_resolver_queue (host->hostname, host->portnum, &hints, resolve_cb, host);
 }
 
 static int
@@ -203,7 +204,8 @@ host_update_interval (struct host *host, mstime interval)
 }
 
 static struct host*
-host_instance (const char *hostname, const char *community, int version, mstime interval)
+host_instance (const char *hostname, const char *portnum,
+               const char *community, int version, mstime interval)
 {
 	struct addrinfo hints, *ai;
 	struct host *host;
@@ -212,6 +214,9 @@ host_instance (const char *hostname, const char *community, int version, mstime 
 
 	ASSERT (hostname);
 	initialize = 0;
+
+	if (!portnum)
+		portnum = "161";
 
 	/*
 	 * Build a lookup key. We can only combine requests for the same
@@ -230,7 +235,7 @@ host_instance (const char *hostname, const char *community, int version, mstime 
 		hints.ai_socktype = SOCK_DGRAM;
 		hints.ai_flags = AI_NUMERICSERV | AI_NUMERICHOST;
 
-		r = getaddrinfo (hostname, "161", &hints, &ai);
+		r = getaddrinfo (hostname, portnum, &hints, &ai);
 
 		/* Ignore error and try to resolve again later */
 		if (r == EAI_NONAME || r == EAI_AGAIN || r == EAI_MEMORY) {
@@ -281,6 +286,7 @@ host_instance (const char *hostname, const char *community, int version, mstime 
 
 		host->version = version;
 		host->hostname = strdup (hostname);
+		host->portnum = strdup (portnum);
 		host->community = strdup (community);
 		host->resolve_interval = 0;
 		host->last_resolved = 0;
@@ -321,8 +327,10 @@ host_cleanup (void)
 
 	for (host = host_list; host; host = next) {
 		next = host->next;
-	        if (host->hostname)
+		if (host->hostname)
 			free (host->hostname);
+		if (host->portnum)
+			free (host->portnum);
 		if (host->community)
 			free (host->community);
 		if (host->prepared)
@@ -818,7 +826,8 @@ request_prep_instance (struct host *host, mstime interval, mstime timeout, int r
 }
 
 int
-snmp_engine_request (const char *hostname, const char *community, int version,
+snmp_engine_request (const char *hostname, const char *port,
+                     const char *community, int version,
                      mstime interval, mstime timeout, int reqtype,
                      struct asn_oid *oid, snmp_response func, void *arg)
 {
@@ -829,7 +838,7 @@ snmp_engine_request (const char *hostname, const char *community, int version,
 	ASSERT (func);
 
 	/* Lookup host for request */
-	host = host_instance (hostname, community, version, interval);
+	host = host_instance (hostname, port, community, version, interval);
 	if (!host)
 		return 0;
 
@@ -945,8 +954,8 @@ sync_response (int req, int code, struct snmp_value *value, void *data)
 }
 
 int
-snmp_engine_sync (const char* host, const char* community, int version,
-                  uint64_t interval, uint64_t timeout, int reqtype,
+snmp_engine_sync (const char* host, const char *port, const char* community,
+                  int version, uint64_t interval, uint64_t timeout, int reqtype,
                   struct snmp_value *value)
 {
 	struct sync_data sync;
@@ -958,7 +967,7 @@ snmp_engine_sync (const char* host, const char* community, int version,
 	sync.code = 0;
 	sync.dest = value;
 
-	sync.id = snmp_engine_request (host, community, version, interval, timeout,
+	sync.id = snmp_engine_request (host, port, community, version, interval, timeout,
 	                               reqtype, &value->var, sync_response, &sync);
 
 	if (!sync.id)

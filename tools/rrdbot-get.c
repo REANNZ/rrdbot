@@ -60,7 +60,8 @@ struct context
 	struct asn_oid oid_first;           	/* The first OID we've done */
 
 	/* Request data */
-	char host[128];                    	/* The remote host, resolved to an address */
+	char host[128];                    /* The remote host, resolved to an address */
+	char *port;                        /* The remote port to connect to */
 	char *community;			/* The community to use */
 	int version;				/* protocol version */
 
@@ -153,12 +154,12 @@ parse_argument (char *uri)
 	enum snmp_version version;
 	const char* msg;
 	char* copy;
-	char *user, *host, *scheme, *path, *query;
+	char *user, *host, *port, *scheme, *path, *query;
 	char *value, *name;
 
 	/* Parse the SNMP URI */
 	copy = strdup (uri);
-	msg = cfg_parse_uri (uri, &scheme, &host, &user, &path, &query);
+	msg = cfg_parse_uri (uri, &scheme, &host, &port, &user, &path, &query);
 	if (msg)
 		errx (2, "%s: %s", msg, copy);
 	free (copy);
@@ -168,6 +169,7 @@ parse_argument (char *uri)
 	/* Host, community */
 	parse_host (host);
 	ctx.community = user ? user : "public";
+	ctx.port = port ? port : "161";
 
 	/* Currently we only support SNMP pollers */
 	msg = cfg_parse_scheme (scheme, &version);
@@ -282,7 +284,7 @@ process_recursive (void)
 
 		memcpy (&value.var, &last, sizeof (value.var));
 
-		ret = snmp_engine_sync (ctx.host, ctx.community, ctx.version,
+		ret = snmp_engine_sync (ctx.host, ctx.port, ctx.community, ctx.version,
 		                        0, ctx.timeout, SNMP_PDU_GETNEXT, &value);
 
 		/* Reached the end */
@@ -330,7 +332,7 @@ process_query (void)
 	for (;;) {
 
 		/* Do the request */
-		ret = snmp_engine_sync (ctx.host, ctx.community, ctx.version,
+		ret = snmp_engine_sync (ctx.host, ctx.port, ctx.community, ctx.version,
 		                        0, ctx.timeout, SNMP_PDU_GETNEXT, &value);
 
 		/* Convert these result codes into 'not found' */
@@ -372,7 +374,7 @@ process_query (void)
 	value.var.subs[value.var.len] = sub;
 	value.var.len++;
 
-	ret = snmp_engine_sync (ctx.host, ctx.community, ctx.version,
+	ret = snmp_engine_sync (ctx.host, ctx.port, ctx.community, ctx.version,
 	                        0, ctx.timeout, SNMP_PDU_GET, &value);
 
 	if (ret != SNMP_ERR_NOERROR)
@@ -390,7 +392,7 @@ process_simple (void)
 	memset (&value, 0, sizeof (value));
 	memcpy (&value.var, &ctx.request_oid, sizeof (value.var));
 
-	ret = snmp_engine_sync (ctx.host, ctx.community, ctx.version,
+	ret = snmp_engine_sync (ctx.host, ctx.port, ctx.community, ctx.version,
 	                        0, ctx.timeout, SNMP_PDU_GET, &value);
 
 	if (ret != SNMP_ERR_NOERROR)

@@ -291,7 +291,7 @@ field_request (rb_item *item)
 
         item->vtype = VALUE_UNSET;
 
-	req = snmp_engine_request (item->hostnames[item->hostindex], item->community,
+	req = snmp_engine_request (item->hostnames[item->hostindex], item->portnum, item->community,
 	                           item->version, item->poller->interval, item->poller->timeout,
 	                           SNMP_PDU_GET, &item->field_oid, field_response, item);
 	item->field_request = req;
@@ -321,7 +321,7 @@ query_value_request (rb_item *item, asn_subid_t subid)
 
 	log_debug ("query requesting value for table index: %u", subid);
 
-	req = snmp_engine_request (item->hostnames[item->hostindex], item->community,
+	req = snmp_engine_request (item->hostnames[item->hostindex], item->portnum, item->community,
 	                           item->version, item->poller->interval, item->poller->timeout,
 	                           SNMP_PDU_GET, &oid, field_response, item);
 
@@ -434,7 +434,7 @@ query_search_request (rb_item *item)
 		log_debug ("query looking for next table index");
 	}
 
-	req = snmp_engine_request (item->hostnames[item->hostindex], item->community,
+	req = snmp_engine_request (item->hostnames[item->hostindex], item->portnum, item->community,
 	                           item->version, item->poller->interval, item->poller->timeout,
 	                           SNMP_PDU_GETNEXT, oid, query_next_response, item);
 
@@ -526,7 +526,7 @@ query_pair_request (rb_item *item, asn_subid_t subid)
 	oid.subs[oid.len] = subid;
 	++oid.len;
 
-	req = snmp_engine_request (item->hostnames[item->hostindex], item->community,
+	req = snmp_engine_request (item->hostnames[item->hostindex], item->portnum, item->community,
 	                           item->version, item->poller->interval, item->poller->timeout,
 	                           SNMP_PDU_GET, &oid, query_match_response, item);
 
@@ -539,7 +539,7 @@ query_pair_request (rb_item *item, asn_subid_t subid)
 	oid.subs[oid.len] = subid;
 	++oid.len;
 
-	req = snmp_engine_request (item->hostnames[item->hostindex], item->community,
+	req = snmp_engine_request (item->hostnames[item->hostindex], item->portnum, item->community,
 	                           item->version, item->poller->interval, item->poller->timeout,
 	                           SNMP_PDU_GET, &oid, field_response, item);
 

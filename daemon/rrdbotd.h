@@ -76,6 +76,7 @@ typedef struct _rb_item
     /* Host names, with alternate hosts */
     #define MAX_HOSTNAMES 16
     const char* hostnames[MAX_HOSTNAMES];
+    const char* portnum;
     int hostindex;
     int n_hostnames;
 

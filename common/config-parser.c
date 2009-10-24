@@ -356,9 +356,24 @@ cfg_parse_dir(const char* dirname, void* data)
     return ret;
 }
 
+static int
+looks_like_port (const char *port)
+{
+	if (!port || !*port)
+		return 0;
+
+	while (*port) {
+		if (!isdigit(*port))
+			return 0;
+		++port;
+	}
+
+	return 1;
+}
+
 const char*
-cfg_parse_uri (char *uri, char** scheme, char** host, char** user,
-               char** path, char** query)
+cfg_parse_uri (char *uri, char** scheme, char** host, char **port,
+               char** user, char** path, char** query)
 {
     char* t;
 
@@ -367,6 +382,7 @@ cfg_parse_uri (char *uri, char** scheme, char** host, char** user,
     *user = NULL;
     *path = NULL;
     *query = NULL;
+    *port = NULL;
 
     *scheme = strsep(&uri, ":");
     if(uri == NULL || (uri[0] != '/' && uri[1] != '/'))
@@ -374,15 +390,27 @@ cfg_parse_uri (char *uri, char** scheme, char** host, char** user,
 
     uri += 2;
     *host = strsep(&uri, "/");
+
+    /* Parse the community out from the host */
     if(*host[0])
     {
-        /* Parse the community out from the host */
         t = strchr(*host, '@');
         if(t)
         {
             *t = 0;
             *user = *host;
             *host = t + 1;
+        }
+    }
+
+    /* Parse out the port from the uri */
+    if(*host[0])
+    {
+        t = strrchr(*host, ':');
+        if(t && looks_like_port(t + 1))
+        {
+            *t = 0;
+            *port = t + 1;
         }
     }
 

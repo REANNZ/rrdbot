@@ -242,11 +242,11 @@ parse_item (const char *field, char *uri, config_ctx *ctx)
 	enum snmp_version version;
 	const char *msg;
 	char *copy;
-	char *scheme, *host, *user, *path, *query;
+	char *scheme, *host, *user, *path, *query, *port;
 
 	/* Parse the SNMP URI */
 	copy = strdup (uri);
-	msg = cfg_parse_uri (uri, &scheme, &host, &user, &path, &query);
+	msg = cfg_parse_uri (uri, &scheme, &host, &port, &user, &path, &query);
 	if (msg)
 		errx(2, "%s: %s: %s", ctx->confname, msg, copy);
 	free (copy);
@@ -281,6 +281,7 @@ parse_item (const char *field, char *uri, config_ctx *ctx)
 
 	item->poller = NULL; /* Set later in config_done */
 	item->vtype = VALUE_UNSET;
+	item->portnum = port ? port : "161";
 
 	/* Parse the hosts, query */
 	parse_hosts (item, host, ctx);

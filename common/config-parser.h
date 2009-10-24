@@ -51,7 +51,7 @@ int cfg_parse_dir(const char* dirname, void* data);
 int cfg_parse_file(const char* filename, void* data, char** memory);
 
 /* A helper for parsing URIs */
-const char* cfg_parse_uri (char *uri, char** scheme, char** host, char** user, char** path, char** query);
+const char* cfg_parse_uri (char *uri, char** scheme, char** host, char **port, char** user, char** path, char** query);
 
 /* Parsing snmp, snmp2 snmp2c etc... */
 const char* cfg_parse_scheme (const char *input, enum snmp_version *scheme);
