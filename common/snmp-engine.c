@@ -378,14 +378,22 @@ struct request
 	struct snmp_pdu pdu;
 };
 
+struct socket
+{
+	int fd;                         /* The SNMP socket we're communicating on */
+	struct sockaddr_storage addr;   /* Local address of this socket */
+	socklen_t addr_len;             /* Length of addr */
+	struct socket *next;            /* Linked list of socket structures */
+};
+
 /* The number of SNMP packet retries */
 static int snmp_retries = 3;
 
 /* The last request id */
 static uint snmp_request_id = 1;
 
-/* The SNMP socket we're communicating on */
-static int snmp_socket = -1;
+/* The sockets we communicate on */
+static struct socket *snmp_sockets = NULL;
 
 /* Since we only deal with one packet at a time, global buffer */
 static unsigned char snmp_buffer[0x1000];
@@ -413,10 +421,11 @@ request_release (struct request *req)
 static void
 request_send (struct request* req, mstime when)
 {
+	struct socket* sock;
 	struct asn_buf b;
 	ssize_t ret;
 
-	ASSERT (snmp_socket != -1);
+	assert (snmp_sockets != NULL);
 
 	/* Update our bookkeeping */
 	req->num_sent++;
@@ -433,13 +442,25 @@ request_send (struct request* req, mstime when)
 		return;
 	}
 
+	/* Select a good socket to use, based on address family */
+	for (sock = snmp_sockets; sock; sock = sock->next) {
+		if (sock->addr.ss_family == req->host->address.ss_family)
+			break;
+	}
+
+	if (sock == NULL) {
+		log_warnx ("couldn't send snmp packet to: %s: %s",
+		           req->host->hostname, "no local address of relevant protocol family");
+		return;
+	}
+
 	b.asn_ptr = snmp_buffer;
 	b.asn_len = sizeof (snmp_buffer);
 
 	if (snmp_pdu_encode (&req->pdu, &b)) {
 		log_error("couldn't encode snmp buffer");
 	} else {
-		ret = sendto (snmp_socket, snmp_buffer, b.asn_ptr - snmp_buffer, 0,
+		ret = sendto (sock->fd, snmp_buffer, b.asn_ptr - snmp_buffer, 0,
 		              (struct sockaddr*)&req->host->address, req->host->address_len);
 		if (ret == -1)
 			log_error ("couldn't send snmp packet to: %s", req->host->hostname);
@@ -605,11 +626,9 @@ request_response (int fd, int type, void* arg)
 	int len, ret;
 	int ip, id;
 
-	ASSERT (snmp_socket == fd);
-
 	/* Read in the packet */
 	from_len = sizeof (from);
-	len = recvfrom (snmp_socket, snmp_buffer, sizeof (snmp_buffer), 0,
+	len = recvfrom (fd, snmp_buffer, sizeof (snmp_buffer), 0,
 	                (struct sockaddr*)&from, &from_len);
 	if(len < 0) {
 		if(errno != EAGAIN && errno != EWOULDBLOCK)
@@ -985,10 +1004,14 @@ snmp_engine_sync (const char* host, const char *port, const char* community,
  */
 
 void
-snmp_engine_init (const char *bindaddr, int retries)
+snmp_engine_init (const char **bindaddrs, int retries)
 {
 	struct addrinfo hints, *ai;
-	int r;
+	struct socket *sock;
+	const char **p, *bindaddr;
+	int fd, r;
+
+	assert (bindaddrs);
 
 	snmp_retries = retries;
 
@@ -1000,29 +1023,44 @@ snmp_engine_init (const char *bindaddr, int retries)
 	if (!snmp_preparing)
 		err (1, "out of memory");
 
-	if (!bindaddr)
-		bindaddr = "0.0.0.0";
-	memset (&hints, 0, sizeof (hints));
-	hints.ai_flags = AI_PASSIVE;
-	hints.ai_family = PF_UNSPEC;
-	hints.ai_socktype = SOCK_DGRAM;
-	hints.ai_flags = AI_NUMERICSERV;
-	r = getaddrinfo (bindaddr, "0", &hints, &ai);
-	if (r != 0)
-		errx (1, "couldn't resolve bind address: %s: %s", bindaddr, gai_strerror (r));
+	assert (snmp_sockets == NULL);
 
-	ASSERT (snmp_socket == -1);
-	snmp_socket = socket (ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-	if (snmp_socket < 0)
-		err (1, "couldn't open snmp socket");
+	for (p = bindaddrs; p && *p; ++p) {
+		bindaddr = *p;
 
-	if (bind (snmp_socket, ai->ai_addr, ai->ai_addrlen) < 0)
-		err (1, "couldn't listen on port");
+		memset (&hints, 0, sizeof (hints));
+		hints.ai_flags = AI_PASSIVE;
+		hints.ai_family = PF_UNSPEC;
+		hints.ai_socktype = SOCK_DGRAM;
+		hints.ai_flags = AI_NUMERICSERV;
+		r = getaddrinfo (bindaddr, "0", &hints, &ai);
+		if (r != 0)
+			errx (1, "couldn't resolve bind address: %s: %s", bindaddr, gai_strerror (r));
 
-	freeaddrinfo (ai);
+		fd = socket (ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+		if (fd < 0)
+			err (1, "couldn't open snmp socket");
 
-	if (server_watch (snmp_socket, SERVER_READ, request_response, NULL) == -1)
-		err (1, "couldn't listen on socket");
+		if (bind (fd, ai->ai_addr, ai->ai_addrlen) < 0)
+			err (1, "couldn't listen on port");
+
+		if (server_watch (fd, SERVER_READ, request_response, NULL) == -1)
+			err (1, "couldn't listen on socket");
+
+		/* Stash this socket info */
+		sock = xcalloc (sizeof (struct socket));
+		sock->fd = fd;
+
+		if (ai->ai_addrlen > sizeof (sock->addr))
+			errx (1, "resolve address is too big");
+		memcpy (&sock->addr, ai->ai_addr, ai->ai_addrlen);
+
+		/* Push onto the linked list */
+		sock->next = snmp_sockets;
+		snmp_sockets = sock;
+
+		freeaddrinfo (ai);
+	}
 
 	/* We fire off the resend timer every 1/5 second */
 	if (server_timer (200, request_resend_timer, NULL) == -1)
@@ -1034,10 +1072,17 @@ snmp_engine_init (const char *bindaddr, int retries)
 void
 snmp_engine_stop (void)
 {
-	if (snmp_socket != -1) {
-		server_unwatch (snmp_socket);
-		close (snmp_socket);
-		snmp_socket = -1;
+	struct socket *sock;
+
+	while (snmp_sockets != NULL) {
+		/* Pop off the list */
+		sock = snmp_sockets;
+		snmp_sockets = sock->next;
+
+		/* And destroy */
+		server_unwatch (sock->fd);
+		close (sock->fd);
+		free (sock);
 	}
 
 	host_cleanup ();

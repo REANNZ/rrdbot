@@ -73,6 +73,10 @@ int strtob(const char* str);
 void atexitv(void (*func)(void*), void* data);
 #endif
 
+#ifndef HAVE_XREALLOC
+void* xrealloc(void *p, size_t size);
+#endif
+
 #ifndef HAVE_XCALLOC
 void* xcalloc(size_t size);
 #endif

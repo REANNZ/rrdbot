@@ -235,6 +235,18 @@ atexitv(voidfunc func, void* data)
 
 #endif /* HAVE_ATEXITV */
 
+#ifndef HAVE_XREALLOC
+
+void*
+xrealloc(void *p, size_t size)
+{
+	register void* value = realloc(p, size);
+	if(value == NULL && size)
+		errx(1, "out of memory");
+	return value;
+}
+
+#endif /* HAVE_XREALLOC */
 
 #ifndef HAVE_XCALLOC
 

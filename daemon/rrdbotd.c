@@ -204,8 +204,9 @@ removepid(const char* pidfile)
 int
 main(int argc, char* argv[])
 {
+	const char** local = NULL;
+	int n_local = 0;
     const char* pidfile = NULL;
-    const char *bind_address = NULL;
     int daemonize = 1;
     char ch;
     char* t;
@@ -231,7 +232,9 @@ main(int argc, char* argv[])
 
         /* Bind address */
         case 'b':
-            bind_address = optarg;
+            local = xrealloc (local, sizeof (char*) * (n_local + 2));
+            local[n_local] = optarg;
+            local[++n_local] = NULL;
             break;
 
         /* Config directory */
@@ -301,6 +304,17 @@ main(int argc, char* argv[])
     if(argc != 0)
         usage();
 
+    /* No bind addresses specified, use defaults... */
+    if (local == NULL) {
+        local = xrealloc (local, sizeof (char*) * 3);
+        local[0] = "0.0.0.0";
+        local[1] = NULL;
+#ifdef HAVE_INET6
+        local[1] = "::";
+        local[2] = NULL;
+#endif
+    }
+
     /* The mainloop server */
     server_init();
 
@@ -311,8 +325,12 @@ main(int argc, char* argv[])
     mib_uninit();
 
     /* Rev up the main engine */
-    snmp_engine_init(bind_address, 3);
+    snmp_engine_init (local, 3);
     rb_poll_engine_init();
+
+    free (local);
+    n_local = 0;
+    local = NULL;
 
     if(daemonize)
     {

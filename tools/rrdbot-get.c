@@ -426,6 +426,8 @@ int
 main (int argc, char* argv[])
 {
 	char *bind_address = NULL;
+	const char **local = NULL;
+	int n_local = 0;
 	char ch;
 	char* t;
 
@@ -460,7 +462,9 @@ main (int argc, char* argv[])
 
 		/* local source address */
 		case 's':
-			bind_address = optarg;
+			local = xrealloc (local, sizeof (char*) * (n_local + 2));
+			local[n_local] = optarg;
+			local[++n_local] = NULL;
 			break;
 
 		/* The timeout */
@@ -495,8 +499,23 @@ main (int argc, char* argv[])
 	if(argc != 1)
 		usage ();
 
+	/* No bind addresses specified, use defaults... */
+	if (local == NULL) {
+		local = xrealloc (local, sizeof (char*) * 3);
+		local[0] = "0.0.0.0";
+		local[1] = NULL;
+#ifdef HAVE_INET6
+		local[1] = "::";
+		local[2] = NULL;
+#endif
+	}
+
 	server_init ();
-    	snmp_engine_init (bind_address, MAX_RETRIES);
+	snmp_engine_init (local, MAX_RETRIES);
+
+	free (local);
+	n_local = 0;
+	local = NULL;
 
     	parse_argument (argv[0]);
 
