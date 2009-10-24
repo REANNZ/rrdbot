@@ -30,7 +30,11 @@
  *
  * Private functions.
  */
+#include "config.h"
+
+#ifdef HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
+#endif
 
 enum asn_err snmp_binding_encode(struct asn_buf *, const struct snmp_value *);
 enum snmp_code snmp_pdu_encode_header(struct asn_buf *, struct snmp_pdu *);

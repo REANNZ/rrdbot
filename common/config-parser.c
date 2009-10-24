@@ -245,6 +245,7 @@ parse_dir_internal(const char* subdir, void* data)
 {
     char path[MAXPATHLEN];
     struct dirent* dire;
+    int is_dir, is_reg, is_lnk;
     struct stat st;
     char* memory;
     DIR* dir;
@@ -271,8 +272,16 @@ parse_dir_internal(const char* subdir, void* data)
         else
             strlcpy(path, dire->d_name, MAXPATHLEN);
 
-        /* for non BSD compliant filesystem: stat() only if dirent->d_type is unknown */
-        if(dire->d_type == DT_UNKNOWN)
+        is_dir = is_reg = is_lnk = 0;
+#ifdef HAVE_STRUCT_DIRENT_D_TYPE
+        if(dire->d_type != DT_UNKNOWN)
+        {
+            is_dir = (dire->d_type == DT_DIR);
+            is_reg = (dire->d_type == DT_REG);
+            is_lnk = (dire->d_type == DT_LNK);
+        }
+        else
+#endif
         {
             if(stat(path, &st) < 0)
             {
@@ -281,15 +290,15 @@ parse_dir_internal(const char* subdir, void* data)
             }
 
             if(S_ISREG(st.st_mode))
-                dire->d_type = DT_REG;
+                is_reg = 1;
             else if(S_ISDIR(st.st_mode))
-                dire->d_type = DT_DIR;
-            else
-                continue;
+                is_dir = 1;
+            else if(S_ISLNK(st.st_mode))
+                is_lnk = 1;
         }
 
         /* Descend into each sub directory */
-        if(dire->d_type == DT_DIR)
+        if(is_dir)
         {
             /* No hidden or dot directories */
             if(dire->d_name[0] == '.')
@@ -302,7 +311,7 @@ parse_dir_internal(const char* subdir, void* data)
             continue;
         }
 
-        if(dire->d_type != DT_REG && dire->d_type != DT_LNK)
+        if(!is_reg && !is_lnk)
             continue;
 
         /* Build a happy path name */

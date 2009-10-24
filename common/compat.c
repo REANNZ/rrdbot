@@ -276,3 +276,105 @@ void strupr(char* data)
 }
 
 #endif /* HAVE_STRUPR */
+
+#ifndef HAVE_STRNCASECMP
+
+int
+strncasecmp(const char *s1, const char *s2, size_t n)
+{
+	if (n != 0) {
+		const unsigned char
+				*us1 = (const unsigned char *)s1,
+				*us2 = (const unsigned char *)s2;
+
+		do {
+			if (tolower(*us1) != tolower(*us2++))
+				return (tolower(*us1) - tolower(*--us2));
+			if (*us1++ == '\0')
+				break;
+		} while (--n != 0);
+	}
+	return (0);
+}
+
+#endif /* HAVE_STRNCASECMP */
+
+#ifndef HAVE_STRCASESTR
+
+char *
+strcasestr(const char *s, const char *find)
+{
+	char c, sc;
+	size_t len;
+
+	if ((c = *find++) != 0) {
+		c = tolower((unsigned char)c);
+		len = strlen(find);
+		do {
+			do {
+				if ((sc = *s++) == 0)
+					return (NULL);
+			} while ((char)tolower((unsigned char)sc) != c);
+		} while (strncasecmp(s, find, len) != 0);
+		s--;
+	}
+	return ((char *)s);
+}
+
+#endif /* HAVE_STRCASESTR */
+
+#ifndef HAVE_DAEMON
+
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <fcntl.h>
+
+int daemon(int nochdir, int noclose)
+{
+	struct sigaction osa, sa;
+	int oerrno, fd, osa_ok;
+	pid_t newgrp;
+
+	/* A SIGHUP may be thrown when the parent exits below. */
+	sigemptyset(&sa.sa_mask);
+	sa.sa_handler = SIG_IGN;
+	sa.sa_flags = 0;
+	osa_ok = sigaction(SIGHUP, &sa, &osa);
+
+	switch(fork())
+	{
+	case -1:
+		return -1;
+	case 0:
+		break;
+	default:
+		_exit(0);
+	}
+
+	newgrp = setsid();
+	oerrno = errno;
+	if(osa_ok != -1)
+		sigaction(SIGHUP, &osa, NULL);
+	if(newgrp == -1)
+	{
+		errno = oerrno;
+		return -1;
+	}
+	if(!nochdir)
+		chdir("/");
+        if(!noclose && (fd = open("/dev/null", O_RDWR, 0)) != -1)
+	{
+		dup2(fd, STDIN_FILENO);
+		dup2(fd, STDOUT_FILENO);
+		dup2(fd, STDERR_FILENO);
+		if(fd > 2)
+			close(fd);
+        }
+        return 0;
+
+}
+
+#endif /* HAVE_DAEMON */
+
