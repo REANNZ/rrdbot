@@ -41,6 +41,7 @@
 #include <unistd.h>
 #include <syslog.h>
 #include <err.h>
+#include <netdb.h>
 
 #include <bsnmp/asn1.h>
 #include <bsnmp/snmp.h>
@@ -50,7 +51,6 @@
 #include "log.h"
 #include "server-mainloop.h"
 #include "snmp-engine.h"
-#include "sock-any.h"
 
 #define DEFAULT_TIMEOUT     5000        /* Default timeout for SNMP response */
 #define MAX_RETRIES         3           /* Number of SNMP packets we retry */
@@ -120,8 +120,9 @@ log_vmessage (int level, int erno, const char *msg, va_list va)
 static void
 parse_host (char *host)
 {
-	struct sockaddr_any addr;
+	struct addrinfo hints, *ai;
 	char *x;
+	int r;
 
 	/* Use the first of multiple hosts */
 	x = strchr (host, ',');
@@ -130,11 +131,20 @@ parse_host (char *host)
 		warnx ("only using the first host name: %s", host);
 	}
 
-	if (sock_any_pton (host, &addr, SANY_OPT_DEFPORT(161) | SANY_OPT_DEFLOCAL) == -1)
-		err (1, "couldn't resolve host address: %s", host);
+	memset (&hints, 0, sizeof (hints));
+	hints.ai_family = PF_UNSPEC;
+	hints.ai_socktype = SOCK_DGRAM;
+	hints.ai_flags = AI_NUMERICSERV;
+	r = getaddrinfo (host, "161", &hints, &ai);
+	if (r != 0)
+		errx (1, "couldn't resolve host address: %s: %s", host, gai_strerror (r));
 
-	if (sock_any_ntop (&addr, ctx.host, sizeof (ctx.host), 0) == -1)
-		err (1, "couldn't convert host address: %s", host);
+	r = getnameinfo (ai->ai_addr, ai->ai_addrlen, ctx.host, sizeof (ctx.host),
+	                 NULL, 0, NI_NUMERICSERV | NI_NUMERICHOST);
+	if (r != 0)
+		errx (1, "couldn't convert host address: %s: %s", host, gai_strerror (r));
+
+	freeaddrinfo (ai);
 }
 
 static void

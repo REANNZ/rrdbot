@@ -43,7 +43,6 @@
 #include "log.h"
 #include "server-mainloop.h"
 #include "snmp-engine.h"
-#include "sock-any.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -80,7 +79,8 @@ struct host {
 	mstime interval;
 
 	/* Host resolving and book keeping */
-	struct sockaddr_any address;
+	struct sockaddr_storage address;
+	socklen_t address_len;
 	mstime resolve_interval;
 	mstime last_resolve_try;
 	mstime last_resolved;
@@ -113,9 +113,15 @@ resolve_cb (int ecode, struct addrinfo* ai, void* arg)
 		return;
 	}
 
+	if (ai->ai_addrlen > sizeof (host->address)) {
+		log_warnx ("resolved address is too long for host name: %s",
+		           host->hostname);
+		return;
+	}
+
 	/* A successful resolve */
-	memcpy (&SANY_ADDR (host->address), ai->ai_addr, ai->ai_addrlen);
-	SANY_LEN (host->address) = ai->ai_addrlen;
+	memcpy (&host->address, ai->ai_addr, ai->ai_addrlen);
+	host->address_len = ai->ai_addrlen;
 	host->last_resolved = server_get_time ();
 	host->is_resolved = 1;
 
@@ -133,6 +139,7 @@ host_resolve (struct host *host, mstime when)
 	memset (&hints, 0, sizeof (hints));
 	hints.ai_family = PF_UNSPEC;
 	hints.ai_socktype = SOCK_DGRAM;
+	hints.ai_flags = AI_NUMERICSERV;
 
 	/* Automatically strips port number */
 	log_debug ("resolving host: %s", host->hostname);
@@ -198,6 +205,7 @@ host_update_interval (struct host *host, mstime interval)
 static struct host*
 host_instance (const char *hostname, const char *community, int version, mstime interval)
 {
+	struct addrinfo hints, *ai;
 	struct host *host;
 	char key[128];
 	int r, initialize;
@@ -217,19 +225,46 @@ host_instance (const char *hostname, const char *community, int version, mstime 
 	host = hsh_get (host_by_key, key, -1);
 	if (!host) {
 
-		host = calloc (1, sizeof (struct host));
-		if (!host) {
-			log_errorx ("out of memory");
+		memset (&hints, 0, sizeof (hints));
+		hints.ai_family = PF_UNSPEC;
+		hints.ai_socktype = SOCK_DGRAM;
+		hints.ai_flags = AI_NUMERICSERV | AI_NUMERICHOST;
+
+		r = getaddrinfo (hostname, "161", &hints, &ai);
+
+		/* Ignore error and try to resolve again later */
+		if (r == EAI_NONAME || r == EAI_AGAIN || r == EAI_MEMORY) {
+			ai = NULL;
+
+		/* Real errors */
+		} else if (r != 0) {
+			log_warnx ("couldn't parse host address (ignoring): %s: %s",
+			           hostname, gai_strerror (r));
+			return NULL;
+
+		/* Strango address */
+		} else if (ai->ai_addrlen > sizeof (host->address)) {
+			log_warnx ("parsed host address is too big (ignoring): %s", hostname);
 			return NULL;
 		}
 
-		/* Try and resolve the DNS name */
-		r = sock_any_pton (hostname, &host->address, SANY_OPT_DEFPORT(161) | SANY_OPT_DEFLOCAL |
-		                   SANY_OPT_NORESOLV);
-		if (r == -1) {
-			log_warn ("couldn't parse host address (ignoring): %s", hostname);
-			free (host);
+		host = calloc (1, sizeof (struct host));
+		if (!host) {
+			log_errorx ("out of memory");
+			if (ai != NULL)
+				freeaddrinfo (ai);
 			return NULL;
+		}
+
+		if (ai != NULL) {
+			memcpy (&host->address, ai->ai_addr, ai->ai_addrlen);
+			host->address_len = ai->ai_addrlen;
+			freeaddrinfo (ai);
+			host->must_resolve = 0;
+			host->is_resolved = 1;
+		} else {
+			host->must_resolve = 1;
+			host->is_resolved = 0;
 		}
 
 		/* And into the hash table */
@@ -243,14 +278,6 @@ host_instance (const char *hostname, const char *community, int version, mstime 
 		/* And add it to the list */
 		host->next = host_list;
 		host_list = host;
-
-		/*
-		 * If we got back SANY_AF_DNS, then it needs resolving. The actual
-		 * interval and stuff are worked out in once all the hosts, polls etc...
-		 * have been parsed.
-		 */
-		host->must_resolve = (r == SANY_AF_DNS);
-		host->is_resolved = (r != SANY_AF_DNS);
 
 		host->version = version;
 		host->hostname = strdup (hostname);
@@ -405,7 +432,7 @@ request_send (struct request* req, mstime when)
 		log_error("couldn't encode snmp buffer");
 	} else {
 		ret = sendto (snmp_socket, snmp_buffer, b.asn_ptr - snmp_buffer, 0,
-		              &SANY_ADDR (req->host->address), SANY_LEN (req->host->address));
+		              (struct sockaddr*)&req->host->address, req->host->address_len);
 		if (ret == -1)
 			log_error ("couldn't send snmp packet to: %s", req->host->hostname);
 		else
@@ -560,30 +587,32 @@ request_other_dispatch (struct request* req, struct snmp_pdu* pdu)
 static void
 request_response (int fd, int type, void* arg)
 {
+	struct sockaddr_storage from;
 	char hostname[MAXPATHLEN];
-	struct sockaddr_any from;
 	struct snmp_pdu pdu;
 	struct asn_buf b;
 	struct request* req;
 	const char* msg;
+	socklen_t from_len;
 	int len, ret;
 	int ip, id;
 
 	ASSERT (snmp_socket == fd);
 
 	/* Read in the packet */
-
-	SANY_LEN (from) = sizeof (from);
+	from_len = sizeof (from);
 	len = recvfrom (snmp_socket, snmp_buffer, sizeof (snmp_buffer), 0,
-	                &SANY_ADDR (from), &SANY_LEN (from));
+	                (struct sockaddr*)&from, &from_len);
 	if(len < 0) {
 		if(errno != EAGAIN && errno != EWOULDBLOCK)
 			log_error ("error receiving snmp packet from network");
 		return;
 	}
 
-	if (sock_any_ntop (&from, hostname, MAXPATHLEN, 0) == -1)
-		strcpy(hostname, "[UNKNOWN]");
+	if (getnameinfo ((struct sockaddr*)&from, from_len,
+	                 hostname, sizeof (hostname), NULL, 0,
+	                 NI_NUMERICHOST) != 0)
+		strcpy (hostname, "[UNKNOWN]");
 
 	/* Now parse the packet */
 
@@ -949,7 +978,8 @@ snmp_engine_sync (const char* host, const char* community, int version,
 void
 snmp_engine_init (const char *bindaddr, int retries)
 {
-	struct sockaddr_any addr;
+	struct addrinfo hints, *ai;
+	int r;
 
 	snmp_retries = retries;
 
@@ -961,19 +991,26 @@ snmp_engine_init (const char *bindaddr, int retries)
 	if (!snmp_preparing)
 		err (1, "out of memory");
 
-	memset (&addr, 0, sizeof(addr));
 	if (!bindaddr)
 		bindaddr = "0.0.0.0";
-	if (sock_any_pton (bindaddr, &addr, SANY_OPT_DEFPORT (0) | SANY_OPT_DEFANY) < 0)
-		err (1, "couldn't parse bind address: %s", bindaddr);
+	memset (&hints, 0, sizeof (hints));
+	hints.ai_flags = AI_PASSIVE;
+	hints.ai_family = PF_UNSPEC;
+	hints.ai_socktype = SOCK_DGRAM;
+	hints.ai_flags = AI_NUMERICSERV;
+	r = getaddrinfo (bindaddr, "0", &hints, &ai);
+	if (r != 0)
+		errx (1, "couldn't resolve bind address: %s: %s", bindaddr, gai_strerror (r));
 
 	ASSERT (snmp_socket == -1);
-	snmp_socket = socket (SANY_TYPE (addr), SOCK_DGRAM, 0);
+	snmp_socket = socket (ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 	if (snmp_socket < 0)
 		err (1, "couldn't open snmp socket");
 
-	if (bind (snmp_socket, &SANY_ADDR (addr), SANY_LEN (addr)) < 0)
+	if (bind (snmp_socket, ai->ai_addr, ai->ai_addrlen) < 0)
 		err (1, "couldn't listen on port");
+
+	freeaddrinfo (ai);
 
 	if (server_watch (snmp_socket, SERVER_READ, request_response, NULL) == -1)
 		err (1, "couldn't listen on socket");

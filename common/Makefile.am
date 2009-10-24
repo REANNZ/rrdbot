@@ -8,7 +8,6 @@ libcommon_a_SOURCES = \
 	hash.h hash.c \
 	log.h log.c \
 	server-mainloop.c server-mainloop.h \
-	sock-any.h sock-any.c \
 	snmp-engine.h snmp-engine.c \
 	usuals.h
 

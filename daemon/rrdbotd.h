@@ -44,7 +44,6 @@
 
 #include "asn1.h"
 #include "snmp.h"
-#include "sock-any.h"
 #include "hash.h"
 
 /* -----------------------------------------------------------------------------
