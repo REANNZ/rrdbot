@@ -206,7 +206,7 @@ int sock_any_pton(const char* addr, struct sockaddr_any* any, int opts)
         t++;
     }
 
-    if(t)
+    if(t && *t)
     {
       port = strtol(t, &t, 10);
       if(*t || port <= 0 || port >= 65536)
