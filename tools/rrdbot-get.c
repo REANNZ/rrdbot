@@ -37,6 +37,7 @@
  */
 
 #include "usuals.h"
+#include <sys/socket.h>
 #include <errno.h>
 #include <unistd.h>
 #include <syslog.h>
@@ -425,7 +426,6 @@ version()
 int
 main (int argc, char* argv[])
 {
-	char *bind_address = NULL;
 	const char **local = NULL;
 	int n_local = 0;
 	char ch;
