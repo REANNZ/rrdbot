@@ -1036,17 +1036,26 @@ snmp_engine_init (const char **bindaddrs, int retries)
 		hints.ai_flags = AI_NUMERICSERV;
 		r = getaddrinfo (bindaddr, "0", &hints, &ai);
 		if (r != 0)
-			errx (1, "couldn't resolve bind address: %s: %s", bindaddr, gai_strerror (r));
+			errx (1, "couldn't resolve bind address '%s': %s", bindaddr, gai_strerror (r));
 
 		fd = socket (ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-		if (fd < 0)
-			err (1, "couldn't open snmp socket");
+		if (fd < 0) {
+			if (errno == EPROTONOSUPPORT ||
+			    errno == ENOPROTOOPT ||
+			    errno == ESOCKTNOSUPPORT) {
+				warn ("couldn't create snmp socket for '%s'", bindaddr);
+				freeaddrinfo (ai);
+				continue;
+			} else {
+				err (1, "couldn't open snmp socket");
+			}
+		}
 
 		if (bind (fd, ai->ai_addr, ai->ai_addrlen) < 0)
 			err (1, "couldn't listen on port");
 
 		if (server_watch (fd, SERVER_READ, request_response, NULL) == -1)
-			err (1, "couldn't listen on socket");
+			err (1, "couldn't watch port");
 
 		/* Stash this socket info */
 		sock = xcalloc (sizeof (struct socket));
@@ -1062,6 +1071,9 @@ snmp_engine_init (const char **bindaddrs, int retries)
 
 		freeaddrinfo (ai);
 	}
+
+	if (snmp_sockets == NULL)
+		errx (1, "no local addresses to listen on");
 
 	/* We fire off the resend timer every 1/5 second */
 	if (server_timer (200, request_resend_timer, NULL) == -1)
