@@ -10,6 +10,8 @@ if test -d .git; then
 	fi
 fi
 
+set -x
+
 aclocal
 autoheader
 automake -a
