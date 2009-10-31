@@ -1,3 +1,8 @@
+0.9.6  [2009-10-29]
+    - Fix build problems on FreeBSD.
+    - Allow failure for listening on sockets, as long as one
+      listen socket works.
+
 0.9.5  [2009-10-28]
     - Move development to git.
     - Add more MIB files from Freebsd and BSNMP
