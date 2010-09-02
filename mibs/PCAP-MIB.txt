@@ -37,7 +37,7 @@ pcap MODULE-IDENTITY
     CONTACT-INFO "stef@memberwebs.com"
     DESCRIPTION "The MIB for the bsnmp-pcap module."
 
-    ::= { begemot 206 }
+    ::= { begemot 1112 }
 
 -- --------------------------------------------------------------------------
 
