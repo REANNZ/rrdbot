@@ -387,6 +387,8 @@ struct socket
 	struct socket *next;            /* Linked list of socket structures */
 };
 
+#define MAX_SNMP_REQUEST_ID 0x800000
+
 /* The number of SNMP packet retries */
 static int snmp_retries = 3;
 
@@ -805,10 +807,14 @@ request_prep_instance (struct host *host, mstime interval, mstime timeout, int r
 	}
 
 	/* Assign the unique id */
-	req->snmp_id = snmp_request_id++;
+	req->snmp_id = ++snmp_request_id;
 
-	/* Roll around after a decent amount of ids */
-	if (snmp_request_id >= 0xFFFFFF)
+	/*
+	 * Roll around after a decent amount of ids. Since we're using
+	 * signed integers, and these are used in strange ways, we can't
+	 * go above 0x800000 or so.
+	 */
+	if (snmp_request_id >= MAX_SNMP_REQUEST_ID)
 		snmp_request_id = 1;
 
 	/* Mark it down as something we want to prepare */
@@ -904,7 +910,7 @@ snmp_engine_cancel (int id)
 	snmp_id = REQUEST_ID_SNMP (id);
 	callback_id = REQUEST_ID_CB (id);
 
-	ASSERT (snmp_id > 0 && snmp_id < 0xFFFFFF);
+	ASSERT (snmp_id > 0 && snmp_id < MAX_SNMP_REQUEST_ID);
 	ASSERT (callback_id >= 0 && callback_id < SNMP_MAX_BINDINGS);
 
 	/* Is it being processed? */
