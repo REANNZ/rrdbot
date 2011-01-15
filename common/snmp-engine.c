@@ -1058,7 +1058,7 @@ snmp_engine_init (const char **bindaddrs, int retries)
 		}
 
 		if (bind (fd, ai->ai_addr, ai->ai_addrlen) < 0)
-			err (1, "couldn't listen on port");
+			err (1, "couldn't listen on port '%s'", bindaddr);
 
 		if (server_watch (fd, SERVER_READ, request_response, NULL) == -1)
 			err (1, "couldn't watch port");
