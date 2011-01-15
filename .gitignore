@@ -2,6 +2,7 @@
 /.settings
 *.o
 /.suppressions
+/test
 
 # /
 /configure.lineno
