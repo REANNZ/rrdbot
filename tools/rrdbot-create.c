@@ -743,7 +743,6 @@ cfg_value(const char* filename, const char* header, const char* name,
 	    ctx->cfs = cfs;
 	}
 
-        ctx->create = 0;
         return 0;
     }
 
