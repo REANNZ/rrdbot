@@ -314,7 +314,7 @@ parse_dir_internal(const char* subdir, void* data)
         if(!is_reg && !is_lnk)
             continue;
 
-        /* Build a happy path name */
+        memory = NULL;
         cfg_parse_file(path, data, &memory);
 
         /* We call it with blanks after files */
