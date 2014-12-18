@@ -109,13 +109,22 @@ typedef struct _rb_item
 }
 rb_item;
 
+typedef struct _file_path
+{
+    const char * path;
+    /* Next in list of items */
+    struct _file_path* next;
+}
+file_path;
+
 typedef struct _rb_poller
 {
-    /* The hash key is interval-timeout:rrdname */
+    /* The hash key is timeout-interval:conffile or
+     * timeout-interval:rrdname in the case of a default rrd path */
     char key[MAXPATHLEN];
 
-    /* This points into the memory above */
-    const char* rrdname;
+    file_path* rrdlist;
+    file_path* rawlist;
 
     mstime interval;
     mstime timeout;

@@ -617,20 +617,7 @@ poller_timer (mstime when, void *arg)
 static int
 prep_timer (mstime when, void* arg)
 {
-	/*
-	 * We don't prepare all timers at exactly the same time
-	 * but we sort of randomly start the various timers. We're
-	 * going to be hitting these over and over again, so there's
-	 * lots of benefits to spreading them out randomly over a
-	 * few seconds.
-	 */
-
 	rb_poller* poll;
-	int next;
-
-	/* All done? */
-	if(!arg)
-		return 0;
 
 	poll = (rb_poller*)arg;
 	if (server_timer (poll->interval, poller_timer, poll) == -1)
@@ -639,9 +626,6 @@ prep_timer (mstime when, void* arg)
 	/* Run the poll the first time */
 	poller_timer (when, poll);
 
-	/* Setup the next poller anywhere between 0 and 750 ms */
-	next = rand () % 750;
-	server_oneshot (next, prep_timer, poll->next);
 	return 0;
 }
 
@@ -649,9 +633,19 @@ prep_timer (mstime when, void* arg)
 void
 rb_poll_engine_init (void)
 {
-	/* Start the preparation timers for setting up randomly */
-	if (server_oneshot (100, prep_timer, g_state.polls) == -1)
-		err(1, "couldn't setup timer");
+    /* 
+     * Randomly start all timers with a small random offset
+     * of between 0-interval time. This spreads the polls out over a few
+     * seconds.
+     */
+    rb_poller * poll = g_state.polls;
+    if (poll != NULL) {
+        do {
+            int rand_delay = rand() % poll->interval;
+            if (server_oneshot(rand_delay, prep_timer, poll) == -1)
+                err(1, "couldn't setup timer");
+        } while ((poll = poll->next) != NULL);
+    }
 }
 
 void

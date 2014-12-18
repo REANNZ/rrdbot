@@ -135,11 +135,20 @@ typedef struct _create_arg
 }
 create_arg;
 
+/* This is identical to struct _file_path in rrdbotd.h */
+typedef struct _create_file_path
+{
+    const char * path;
+    /* Next in list of items */
+    struct _create_file_path* next;
+}
+create_file_path;
+
 typedef struct _create_ctx
 {
     const char* workdir;
     const char* confname;
-    const char* rrdname;
+    create_file_path* rrdlist;
     uint interval;
     int cfs;
     int create;
@@ -201,6 +210,7 @@ context_reset(create_ctx* ctx)
 {
     field_arg* field;
     rra_arg* rra;
+    create_file_path* cfp;
 
     while(ctx->fields) {
         field = ctx->fields->next;
@@ -212,6 +222,12 @@ context_reset(create_ctx* ctx)
         rra = ctx->rras->next;
         free(ctx->rras);
         ctx->rras = rra;
+    }
+
+    while(ctx->rrdlist) {
+        cfp = ctx->rrdlist->next;
+        free(ctx->rrdlist);
+        ctx->rrdlist = cfp;
     }
 
     ctx->confname = NULL;
@@ -466,6 +482,7 @@ static void
 check_create_file(create_ctx* ctx)
 {
     char rrd[MAXPATHLEN];
+    create_file_path *rrdpath;
 
     ASSERT(ctx->confname);
 
@@ -473,31 +490,45 @@ check_create_file(create_ctx* ctx)
     if(!ctx->create)
         return;
 
-    if(ctx->rrdname)
-        strlcpy(rrd, ctx->rrdname, sizeof(rrd));
-    else
+    /* No rrdpath then use default */
+    if(ctx->rrdlist == NULL)
     {
+        ctx->rrdlist = (create_file_path*)xcalloc(sizeof(*ctx->rrdlist));
         snprintf(rrd, sizeof(rrd), "%s/%s.rrd", ctx->workdir, ctx->confname);
         rrd[sizeof(rrd) - 1] = 0;
+        ctx->rrdlist->path = rrd;
+        ctx->rrdlist->next = NULL;
     }
 
-    if(!g_print)
+    for(rrdpath = ctx->rrdlist; rrdpath; rrdpath = rrdpath->next)
     {
-        /* Make sure it exists */
-        if(access(rrd, F_OK) == 0)
+        if(!g_print)
         {
-            verb("rrd file already exists, skipping: %s", rrd);
-            return;
+            /* Make sure it exists */
+            if(access(rrdpath->path, F_OK) == 0)
+            {
+                verb("rrd file already exists, skipping: %s", rrdpath->path);
+                return;
+            }
+            else if(errno != ENOENT)
+            {
+                warn("couldn't check rrd file: %s", rrdpath->path);
+                return;
+            }
         }
-        else if(errno != ENOENT)
-        {
-            warn("couldn't check rrd file: %s", rrd);
-            return;
-        }
+
+        if(ctx->skip || create_file(ctx, rrdpath->path) < 0)
+            warnx("skipping rrd creation due to configuration errors: %s",
+                    rrdpath->path);
     }
 
-    if(ctx->skip || create_file(ctx, rrd) < 0)
-        warnx("skipping rrd creation due to configuration errors: %s", rrd);
+    /* If we built a default path free and remove it */
+    if (ctx->rrdlist->path == rrd)
+    {
+        free(ctx->rrdlist) ;
+        ctx->rrdlist = NULL;
+    }
+
 }
 
 static uint
@@ -716,7 +747,13 @@ cfg_value(const char* filename, const char* header, const char* name,
     {
         /* rrd option */
         if(strcmp(name, CONFIG_RRD) == 0)
-            ctx->rrdname = value;
+        {
+            create_file_path *p = (create_file_path*)xcalloc(sizeof(*p));
+            p->path = value;
+            /* Add the new path to the rrd list */
+            p->next = ctx->rrdlist;
+            ctx->rrdlist = p;
+        }
 
         /* Ignore other options */
         return 0;

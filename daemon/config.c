@@ -59,7 +59,8 @@
 typedef struct _config_ctx
 {
     const char* confname;
-    const char* rrdname;
+    file_path* rrdlist;
+    file_path* rawlist;
     uint interval;
     uint timeout;
     rb_item* items;
@@ -72,6 +73,7 @@ config_ctx;
 
 #define CONFIG_GENERAL "general"
 #define CONFIG_RRD "rrd"
+#define CONFIG_RAW "raw"
 #define CONFIG_POLL "poll"
 #define CONFIG_INTERVAL "interval"
 #define CONFIG_TIMEOUT "timeout"
@@ -105,10 +107,18 @@ config_done(config_ctx* ctx)
         if(ctx->timeout == 0)
             ctx->timeout = g_state.timeout;
 
-        /* And a nice key for lookups */
-        if(ctx->rrdname)
+        /* And a nice key for lookups 
+         * The key uses the configuration file name if 1 or more rrd files
+         * are specified.
+         * Otherwise we're using default rrd file path, so we can point to
+         * our file_path->path to it with worrying about memory management.
+         * 
+         * These changes mean that configuration files using the same 
+         * rrd files are no longer merged into a single poll.
+         */
+        if(ctx->rrdlist)
             snprintf(key, sizeof(key), "%d-%d:%s", ctx->timeout, ctx->interval,
-                     ctx->rrdname);
+                     ctx->confname);
         else
             snprintf(key, sizeof(key), "%d-%d:%s/%s.rrd", ctx->timeout,
                      ctx->interval, g_state.rrddir, ctx->confname);
@@ -121,9 +131,21 @@ config_done(config_ctx* ctx)
             poll = (rb_poller*)xcalloc(sizeof(*poll));
 
             strcpy(poll->key, key);
-            t = strchr(poll->key, ':');
-            ASSERT(t);
-            poll->rrdname = t + 1;
+
+            if(!ctx->rrdlist)
+            {
+                /* Use default location */
+                /* Point path into the key */
+                t = strchr(poll->key, ':');
+                ASSERT(t);
+                ctx->rrdlist = (file_path*)xcalloc(sizeof(*ctx->rrdlist));
+                /* Skip the ':' */
+                ctx->rrdlist->path = t + 1;
+                ctx->rrdlist->next = NULL;
+            }
+
+            poll->rawlist = ctx->rawlist;
+            poll->rrdlist = ctx->rrdlist;
 
             poll->interval = ctx->interval * 1000;
             poll->timeout = ctx->timeout * 1000;
@@ -158,6 +180,8 @@ config_done(config_ctx* ctx)
 
     /* Clear current config and get ready for next */
     ctx->items = NULL;
+    ctx->rrdlist = NULL;
+    ctx->rawlist = NULL;
     ctx->interval = 0;
     ctx->timeout = 0;
 }
@@ -306,7 +330,22 @@ config_value(const char* header, const char* name, char* value,
     if(strcmp(header, CONFIG_GENERAL) == 0)
     {
         if(strcmp(name, CONFIG_RRD) == 0)
-            ctx->rrdname = value;
+        {
+            file_path *p = (file_path*)xcalloc(sizeof(*p));
+            p->path = value;
+            /* Add the new path to the rrd list */
+            p->next = ctx->rrdlist;
+            ctx->rrdlist = p;
+        }
+
+        if(strcmp(name, CONFIG_RAW) == 0)
+        {
+            file_path *p = (file_path*)xcalloc(sizeof(*p));
+            p->path = value;
+            /* Add the new path to the raw list */
+            p->next = ctx->rawlist;
+            ctx->rawlist = p;
+        }
 
         /* Ignore other [general] options */
         return;
@@ -452,11 +491,26 @@ static void
 free_pollers(rb_poller* poll)
 {
     rb_poller* next;
+    file_path* fp;
     for(; poll; poll = next)
     {
         free_items(poll->items);
 
         next = poll->next;
+
+        /* Free the associated file paths */
+        while(poll->rrdlist) {
+            fp = poll->rrdlist->next;
+            free(poll->rrdlist);
+            poll->rrdlist = fp;
+        }
+
+        while(poll->rawlist) {
+            fp = poll->rawlist->next;
+            free(poll->rawlist);
+            poll->rawlist = fp;
+        }
+
         free(poll);
     }
 

@@ -86,6 +86,13 @@ header in a configuration file.
 .It Ar rrd 
 The location of the RRD file. If not specified these are chosen automatically.
 See the FILE LOCATIONS topic below. When specified this should be a full path.
+Multiple RRD files may be specified.
+.Pp
+[ Optional ]
+.It Ar raw 
+The location to output a raw CSV file. This location is first parsed by 
+strftime with the poll time to find the resulting output location.
+When specified this should be a full path. Multiple raw files may be specified.
 .Pp
 [ Optional ]
 .El
