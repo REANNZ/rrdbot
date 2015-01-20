@@ -89,4 +89,20 @@ void strlwr(char* data);
 void strupr(char* data);
 #endif
 
+/*
+ * strcasestr is a GNU specific extension to the C standard, gcc -Wall will
+ * misleadingly warn "implicit declaration of function" unless we provide a
+ * function prototype ourselves.
+ * http://cboard.cprogramming.com/c-programming/116834-question-linux-gcc-c-standards.html
+ */
+char * strcasestr(const char *s, const char *find);
+
+#ifndef HAVE_STRNCASECMP
+int strncasecmp(const char *s1, const char *s2, size_t n);
+#endif
+
+#ifndef HAVE_DAEMON
+int daemon(int nochdir, int noclose);
+#endif
+
 #endif /* __COMPAT_H__ */

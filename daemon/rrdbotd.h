@@ -65,6 +65,9 @@ typedef struct _rb_item
     /* The field name, RRD and display */
     const char* field;
 
+    /* The reference value for the field */
+    const char* reference;
+
     /* Connection information */
     const char* community;
     int version;
@@ -88,6 +91,10 @@ typedef struct _rb_item
     int query_searched;
     struct asn_oid query_last;
     int query_request;
+
+    /* Book keeping */
+    mstime last_request;
+    mstime last_polled;
 
     /* The last value / current request */
     union

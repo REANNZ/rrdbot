@@ -325,7 +325,7 @@ main(int argc, char* argv[])
     mib_uninit();
 
     /* Rev up the main engine */
-    snmp_engine_init (local, 3);
+    snmp_engine_init (local, g_state.retries);
     rb_poll_engine_init();
 
     free (local);

@@ -78,6 +78,8 @@ static void
 tsignal_clear(int* sig)
 {
     char buf[16];
+    if(sig[0] == -1)
+        return;
     while(read(sig[0], buf, sizeof(buf)) > 0);
 }
 
@@ -308,9 +310,7 @@ async_resolver_queue(const char* hostname, const char* servname,
         }
         else
         {
-            r = res_requests;
-            while(r->next)
-                r = r->next;
+            for(r = res_requests; r->next; r = r->next);
             r->next = req;
         }
 

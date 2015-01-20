@@ -58,7 +58,7 @@ void rb_rrd_update(rb_poller *poll)
     char* items;
     char* c;
     int r, tlen, ilen;
-    rb_item *it;
+    rb_item *item;
     file_path *rrdpath;
     file_path *rawpath;
 
@@ -66,12 +66,12 @@ void rb_rrd_update(rb_poller *poll)
         return;
 
     tlen = 0;
-    ilen = 3;
+    ilen = MAX_NUMLEN + 1; /* Timestamp ':' */
 
-    for(it = poll->items; it; it = it->next)
+    for(item = poll->items; item; item = item->next)
     {
-        tlen += strlen(it->field) + 1;
-        ilen += 40;
+        tlen += strlen(item->field) + 1; /* Field plus ':' or '\0' */
+        ilen += MAX_NUMLEN + 1;          /* Value plus ':' or '\0' */
     }
 
     template = (char*)calloc(tlen, sizeof(char));
@@ -88,27 +88,27 @@ void rb_rrd_update(rb_poller *poll)
     }
 
     /* Put in the right time */
-    snprintf(items, ilen, "%lld:", (poll->last_polled / 1000L));
+    snprintf(items, ilen, "%" PRId64 ":", (poll->last_polled / 1000L));
 
     /* Build the rest of the arguments */
-    for(it = poll->items; it; it = it->next)
+    for(item = poll->items; item; item = item->next)
     {
-        if(it != poll->items)
+        if(item != poll->items)
         {
             strlcat(template, ":", tlen);
             strlcat(items, ":", ilen);
         }
 
-        strlcat(template, it->field, tlen);
+        strlcat(template, item->field, tlen);
 
-        if(it->vtype == VALUE_UNSET)
+        if(item->vtype == VALUE_UNSET)
             strlcat(items, "U", ilen);
         else
         {
-            if(it->vtype == VALUE_FLOAT)
-                snprintf(buf, MAX_NUMLEN, "%.4lf", it->v.f_value);
+            if(item->vtype == VALUE_FLOAT)
+                snprintf(buf, MAX_NUMLEN, "%.4lf", item->v.f_value);
             else
-                snprintf(buf, MAX_NUMLEN, "%lld", it->v.i_value);
+                snprintf(buf, MAX_NUMLEN, "%" PRId64, item->v.i_value);
             buf[MAX_NUMLEN - 1] = 0;
             strlcat(items, buf, ilen);
         }
@@ -139,80 +139,56 @@ void rb_rrd_update(rb_poller *poll)
                         rrdpath->path, rrd_get_error());
     }
 
-    /* Replace our :'s with ',' using csv format for raw files */
-    for(c = items; *c; c++)
-    {
-        if(*c == ':') 
-            *c = ',';
-    }
-
-    /* Loop through all the attached raw files */
-    for(rawpath = poll->rawlist; rawpath; rawpath = rawpath->next)
-    {
-        char path[MAXPATHLEN];
-        FILE *fp;
-        struct tm *timeinfo;
-        time_t time;
-        size_t len;
-
-        /* time expects seconds */
-        time = poll->last_polled / 1000;
-        timeinfo = localtime(&time);
-        len = strftime(path, sizeof(path), rawpath->path, timeinfo);
-
-        if(len == 0)
-        {
-            log_errorx("couldn't strftime the raw file path: %s for writting : %s",
-                        rawpath->path, rrd_get_error());
-            /* Try the next raw file */
-            continue;
-        }
-
-        log_debug ("updating RAW file: %s -> %s", rawpath->path, path);
-
-        if(access(path, R_OK | W_OK) != -1)
-        {
-            /* File exists */
-            fp = fopen(path, "a");
-
-            if(fp == NULL)
-            {
-                log_errorx("couldn't open raw file: %s for writing : %s",
-                            path, rrd_get_error());
-                /* Try the next raw file */
-                continue;
-            }
-        } else {
-            /* Creating new file */
-            fp = fopen(path, "w");
-
-            if(fp == NULL)
-            {
-                log_errorx("couldn't open raw file: %s for writing : %s",
-                            path, rrd_get_error());
-                /* Try the next raw file */
-                continue;
-            }
-
-            /* Put header names into the file */
-            fprintf(fp, "ts,");
-            
-            for(it = poll->items; it; it = it->next)
-            {
-                if (it->next)
-                    fprintf(fp, "%s,", it->field);
-                else
-                    fprintf(fp, "%s\n", it->field);
-            }
-        }
-
-        if(fprintf(fp, "%s\n", items) == 0)
-            log_errorx("failed to write to raw file: %s : %s",
-                        path, rrd_get_error());
-
-        fclose(fp);
-    }
-
     free(template);
     free(items);
+
+    /* Loop through all the attached raw files */
+    for(rawpath = poll->rawlist; rawpath; rawpath = rawpath->next) {
+        for(item = poll->items; item; item = item->next) {
+            char path[MAXPATHLEN];
+            FILE *fp;
+            struct tm *timeinfo;
+            time_t time;
+            size_t len;
+
+            /* time expects seconds */
+            time = item->last_polled / 1000L;
+            timeinfo = localtime(&time);
+            len = strftime(path, sizeof(path), rawpath->path, timeinfo);
+
+            if(len == 0)
+            {
+                log_errorx("couldn't strftime the raw file path: %s for writting : %s",
+                            rawpath->path, strerror(errno));
+                /* Try the next raw file */
+                continue;
+            }
+
+            log_debug ("updating RAW file: %s -> %s", rawpath->path, path);
+
+            fp = fopen(path, "a");
+            if(fp == NULL)
+            {
+                log_errorx("couldn't open raw file: %s for writing : %s",
+                            path,  strerror(errno));
+                /* Try the next item */
+                continue;
+            }
+
+            /* Write item record to raw file */
+            fprintf(fp, "%" PRId64 "\t", time);
+            if(item->reference)
+                fprintf(fp, "%s", item->reference);
+            else
+                fprintf(fp, "%s", item->field);
+            fprintf(fp, "\t");
+            if(item->vtype == VALUE_REAL)
+                fprintf(fp, "%" PRId64, item->v.i_value);
+            else if(item->vtype == VALUE_FLOAT)
+                fprintf(fp, "%.4lf", item->v.f_value);
+            fprintf(fp, "\n");
+
+            fclose(fp);
+        }
+    }
 }

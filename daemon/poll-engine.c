@@ -87,10 +87,10 @@ cancel_requests (rb_item *item, const char *reason)
 	ASSERT (reason);
 	ASSERT (item->field_request || item->query_request);
 
-        log_debug ("value for field '%s': %s", item->field, reason);
-        item->vtype = VALUE_UNSET;
+	log_debug ("value for field '%s': %s", item->field, reason);
+	item->vtype = VALUE_UNSET;
 
-        complete_requests (item, -1);
+	complete_requests (item, -1);
 }
 
 static void
@@ -118,6 +118,11 @@ force_poll (rb_poller *poll, mstime when, const char *reason)
 	/* Mark any non-matched queries as unset */
 	for (item = poll->items; item; item = item->next) {
 		if (item->has_query && !item->query_matched)
+			/*
+			 * We note the failure has having taken place halfway between
+			 * the request and the current time.
+			 */
+			item->last_polled = item->last_request + ((when - item->last_request) / 2);
 			item->vtype = VALUE_UNSET;
 	}
 
@@ -150,8 +155,10 @@ finish_poll (rb_poller *poll, mstime when)
 
 	/* Mark any non-matched queries as unset */
 	for (item = poll->items; item; item = item->next) {
-		if (item->has_query && !item->query_matched)
+		if (item->has_query && !item->query_matched) {
+			item->last_polled = when;
 			item->vtype = VALUE_UNSET;
+		}
 	}
 
 	/* Update the book-keeping */
@@ -211,8 +218,13 @@ field_response (int request, int code, struct snmp_value *value, void *arg)
 {
 	rb_item *item = arg;
 	const char *msg = NULL;
+	mstime when;
 
-	ASSERT (item->field_request == request);
+	ASSERT (request == item->field_request);
+
+	/* Note when the response for this item arrived */
+	when = server_get_time ();
+	item->last_polled = when;
 
 	/* Mark this item as done */
 	item->field_request = 0;
@@ -264,21 +276,21 @@ field_response (int request, int code, struct snmp_value *value, void *arg)
 
 		if (msg)
 			log_warnx (msg, item->field);
-                else if (item->vtype == VALUE_REAL)
-                	log_debug ("got value for field '%s': %lld",
-                	           item->field, item->v.i_value);
-                else if (item->vtype == VALUE_FLOAT)
-		        log_debug ("got value for field '%s': %.4lf",
-		                   item->field, item->v.f_value);
-                else
-                	log_debug ("got value for field '%s': U",
-                	           item->field);
+		else if (item->vtype == VALUE_REAL)
+			log_debug ("got value for field '%s': %lld",
+			           item->field, item->v.i_value);
+		else if (item->vtype == VALUE_FLOAT)
+			log_debug ("got value for field '%s': %.4lf",
+			           item->field, item->v.f_value);
+		else
+			log_debug ("got value for field '%s': U",
+			           item->field);
 	}
 
 	complete_requests (item, code);
 
 	/* If the entire poll is done, then complete it */
-	finish_poll (item->poller, server_get_time ());
+	finish_poll (item->poller, when);
 }
 
 static void
@@ -289,7 +301,7 @@ field_request (rb_item *item)
 	ASSERT (item);
 	ASSERT (!item->field_request);
 
-        item->vtype = VALUE_UNSET;
+	item->vtype = VALUE_UNSET;
 
 	req = snmp_engine_request (item->hostnames[item->hostindex], item->portnum, item->community,
 	                           item->version, item->poller->interval, item->poller->timeout,
@@ -311,7 +323,7 @@ query_value_request (rb_item *item, asn_subid_t subid)
 	ASSERT (!item->query_request);
 	ASSERT (!item->field_request);
 
-        item->vtype = VALUE_UNSET;
+	item->vtype = VALUE_UNSET;
 
 	/* OID for the actual value */
 	oid = item->field_oid;
@@ -325,7 +337,7 @@ query_value_request (rb_item *item, asn_subid_t subid)
 	                           item->version, item->poller->interval, item->poller->timeout,
 	                           SNMP_PDU_GET, &oid, field_response, item);
 
-        /* Value retrieval is active */
+	/* Value retrieval is active */
 	item->field_request = req;
 }
 
@@ -342,6 +354,8 @@ query_next_response (int request, int code, struct snmp_value *value, void *arg)
 
 	ASSERT (request == item->query_request);
 	ASSERT (!item->field_request);
+
+	/* Mark this item as done */
 	item->query_request = 0;
 
 	if (code == SNMP_ERR_NOERROR) {
@@ -386,7 +400,7 @@ query_next_response (int request, int code, struct snmp_value *value, void *arg)
 
 	ASSERT (value);
 
-	/* Match the query valu ereceived */
+	/* Match the query value received */
 	if (item->query_match)
 		matched = snmp_engine_match (value, item->query_match);
 
@@ -455,13 +469,18 @@ query_match_response (int request, int code, struct snmp_value *value, void *arg
 	 */
 
 	ASSERT (request == item->query_request);
-	item->query_request = 0;
 
 	/* Problems communicating with the server? */
 	if (code != SNMP_ERR_NOERROR && code != SNMP_ERR_NOSUCHNAME) {
 		complete_requests (item, code);
 		return;
 	}
+
+	/*
+	 * Mark this item as done after the possible call to complete_requests
+	 * otherwise complete_requests won't free everything.
+	 */
+	item->query_request = 0;
 
 	matched = 0;
 
@@ -517,8 +536,8 @@ query_pair_request (rb_item *item, asn_subid_t subid)
 
 	log_debug ("query requesting match and value pair for index: %u", subid);
 
-        item->vtype = VALUE_UNSET;
-        item->query_matched = 0;
+	item->vtype = VALUE_UNSET;
+	item->query_matched = 0;
 
 	/* OID for the value to match */
 	oid = item->query_oid;
@@ -543,7 +562,7 @@ query_pair_request (rb_item *item, asn_subid_t subid)
 	                           item->version, item->poller->interval, item->poller->timeout,
 	                           SNMP_PDU_GET, &oid, field_response, item);
 
-        /* Value retrieval is active */
+	/* Value retrieval is active */
 	item->field_request = req;
 }
 
@@ -556,18 +575,18 @@ query_request (rb_item *item)
 
 	item->query_searched = 0;
 	item->query_matched = 0;
-        item->vtype = VALUE_UNSET;
+	item->vtype = VALUE_UNSET;
 
 	if (item->query_last.len) {
 
-	        /*
-	         * If we've done this query before, then we know the last matching table
-	         * index. We build a two part request that gets the match value for the
-	         * table index it was last seen on, and the actual value that we want.
-	         *
-	         * Doing this in one request is more efficient, then we check if the
-	         * match value matches the query in the response.
-	         */
+		/*
+		 * If we've done this query before, then we know the last matching table
+		 * index. We build a two part request that gets the match value for the
+		 * table index it was last seen on, and the actual value that we want.
+		 *
+		 * Doing this in one request is more efficient, then we check if the
+		 * match value matches the query in the response.
+		 */
 		query_pair_request (item, item->query_last.subs[item->query_last.len - 1]);
 
 	} else {
@@ -603,6 +622,7 @@ poller_timer (mstime when, void *arg)
 	 * all the timeouts above, as the above could write to RRD.
 	 */
 	for (item = poll->items; item; item = item->next) {
+		item->last_request = when;
 		if (item->has_query)
 			query_request (item);
 		else
@@ -633,23 +653,34 @@ prep_timer (mstime when, void* arg)
 void
 rb_poll_engine_init (void)
 {
-    /* 
-     * Randomly start all timers with a small random offset
-     * of between 0-interval time. This spreads the polls out over a few
-     * seconds.
-     */
-    rb_poller * poll = g_state.polls;
-    if (poll != NULL) {
-        do {
-            int rand_delay = rand() % poll->interval;
-            if (server_oneshot(rand_delay, prep_timer, poll) == -1)
-                err(1, "couldn't setup timer");
-        } while ((poll = poll->next) != NULL);
-    }
+	/*
+	 * Randomly start all timers with a small random offset of between
+	 * 0-interval time. This spreads the polls out over a few seconds.
+	 */
+	rb_poller * poll;
+	int rand_delay;
+
+	for (poll = g_state.polls; poll != NULL; poll = poll->next) {
+		rand_delay = rand() % poll->interval;
+		if (server_oneshot(rand_delay, prep_timer, poll) == -1)
+		    err(1, "couldn't setup timer");
+	}
 }
 
 void
 rb_poll_engine_uninit (void)
 {
+	rb_poller * poll = g_state.polls;
+	rb_item *item;
 
+	if (poll != NULL) {
+		/* Now see if the all the requests are done */
+		for (item = poll->items; item; item = item->next) {
+			if (item->field_request || item->query_request) {
+				cancel_requests (item, "shutdown");
+			}
+			ASSERT (!item->field_request);
+			ASSERT (!item->query_request);
+		}
+	}
 }

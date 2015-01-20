@@ -78,6 +78,7 @@ config_ctx;
 #define CONFIG_INTERVAL "interval"
 #define CONFIG_TIMEOUT "timeout"
 #define CONFIG_SOURCE "source"
+#define CONFIG_REFERENCE "reference"
 
 #define CONFIG_SNMP "snmp"
 #define CONFIG_SNMP2 "snmp2"
@@ -321,6 +322,22 @@ parse_item (const char *field, char *uri, config_ctx *ctx)
 	return item;
 }
 
+static rb_item*
+parse_item_reference (const char *field, char *reference, config_ctx *ctx)
+{
+    rb_item *item;
+
+    for(item = ctx->items; item; item = item->next) {
+        if(strcmp(field, item->field) == 0) {
+            item->reference = reference;
+            return item;
+        }
+    }
+
+    log_warnx ("%s: field %s not found", ctx->confname, field);
+    return NULL;
+}
+
 static void
 config_value(const char* header, const char* name, char* value,
              config_ctx* ctx)
@@ -396,7 +413,7 @@ config_value(const char* header, const char* name, char* value,
     *suffix = 0;
     suffix++;
 
-    /* If it starts with "field." */
+    /* If it starts with "field.source" */
     if(strcmp(suffix, CONFIG_SOURCE) == 0)
     {
         const char* t;
@@ -409,6 +426,13 @@ config_value(const char* header, const char* name, char* value,
 
         /* Parse out the field */
         parse_item(name, value, ctx);
+    }
+
+    /* If it starts with "field.reference" */
+    if(strcmp(suffix, CONFIG_REFERENCE) == 0)
+    {
+        /* Parse out the field */
+        parse_item_reference(name, value, ctx);
     }
 }
 
