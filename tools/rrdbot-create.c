@@ -246,14 +246,14 @@ static int
 mkdir_p(char* path)
 {
     struct stat sb;
-    int first, last, retval = 0;
+    int last, retval = 0;
     char* p = path;
 
     /* Skip leading '/'. */
     while(p[0] == '/')
         ++p;
 
-    for(first = 1, last = 0; !last ; ++p)
+    for(last = 0; !last ; ++p)
     {
         if(p[0] == '\0')
             last = 1;

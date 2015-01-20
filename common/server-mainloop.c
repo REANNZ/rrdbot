@@ -409,6 +409,7 @@ void
 server_unwatch(int fd)
 {
     socket_callback* cb;
+    socket_callback* next;
 
     ASSERT(fd != -1);
 
@@ -422,19 +423,26 @@ server_unwatch(int fd)
     if(ctx.callbacks->fd == fd)
     {
         cb = ctx.callbacks;
-        ctx.callbacks = cb->next;
+        ctx.callbacks = ctx.callbacks->next;
         free(cb);
-        return;
     }
 
+    if(!ctx.callbacks)
+        return;
+
     /* One ahead processing of rest */
-    for(cb = ctx.callbacks; cb->next; cb = cb->next)
+    cb = ctx.callbacks;
+    while(cb->next)
     {
         if(cb->next->fd == fd)
         {
+            next = cb->next;
             cb->next = cb->next->next;
-            free(cb->next);
-            return;
+            free(next);
+        }
+        else
+        {
+            cb = cb->next;
         }
     }
 }

@@ -229,7 +229,7 @@ print_result (struct snmp_value* value)
 		printf ("%u\n", value->v.uint32);
 		break;
 	case SNMP_SYNTAX_COUNTER64:
-		printf ("%llu\n", value->v.counter64);
+		printf ("%" PRIu64 "\n", value->v.counter64);
 		break;
 	case SNMP_SYNTAX_OCTETSTRING:
 		t = xcalloc (value->v.octetstring.len + 1);

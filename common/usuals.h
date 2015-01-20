@@ -49,6 +49,9 @@
 #include <errno.h>
 #include <string.h>
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include "compat.h"
 
 #ifndef NULL
