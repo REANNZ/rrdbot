@@ -1,1 +1,8 @@
-README
+This is a fork of RRDBot.
+
+Original version can be found here:
+http://thewalter.net/stef/software/rrdbot/
+
+This repository contains minor bug fixes and enhancements to RRDBot made by REANNZ and others.
+Notably, the daemon is now capable of writing raw counter values to a plain text file.
+This is particularly useful if values without rrd's rate calculation and interpolation are required.
