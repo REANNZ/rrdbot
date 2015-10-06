@@ -81,13 +81,19 @@ complete_requests (rb_item *item, int code)
 }
 
 static void
-cancel_requests (rb_item *item, const char *reason)
+cancel_requests (rb_item *item, mstime when, const char *reason)
 {
 	ASSERT (item);
 	ASSERT (reason);
 	ASSERT (item->field_request || item->query_request);
 
 	log_debug ("value for field '%s': %s", item->field, reason);
+
+	/*
+	 * We note the failure has having taken place halfway between
+	 * the request and the current time.
+	 */
+	item->last_polled = item->last_request + ((when - item->last_request) / 2);
 	item->vtype = VALUE_UNSET;
 
 	complete_requests (item, -1);
@@ -105,7 +111,7 @@ force_poll (rb_poller *poll, mstime when, const char *reason)
 	/* Now see if the all the requests are done */
 	for (item = poll->items; item; item = item->next) {
 		if (item->field_request || item->query_request) {
-			cancel_requests (item, reason);
+			cancel_requests (item, when, reason);
 			forced = 1;
 		}
 		ASSERT (!item->field_request);
@@ -672,12 +678,14 @@ rb_poll_engine_uninit (void)
 {
 	rb_poller * poll = g_state.polls;
 	rb_item *item;
+	mstime when;
 
 	if (poll != NULL) {
 		/* Now see if the all the requests are done */
+		when = server_get_time ();
 		for (item = poll->items; item; item = item->next) {
 			if (item->field_request || item->query_request) {
-				cancel_requests (item, "shutdown");
+				cancel_requests (item, when, "shutdown");
 			}
 			ASSERT (!item->field_request);
 			ASSERT (!item->query_request);
