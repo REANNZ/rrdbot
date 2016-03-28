@@ -39,9 +39,10 @@
 #define _GNU_SOURCE
 
 #include "usuals.h"
-#include <errno.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <libgen.h>
 
 #include <rrd.h>
 
@@ -50,13 +51,80 @@
 
 #define MAX_NUMLEN 40
 
+char* get_parent(const char *path)
+{
+    char *copy = NULL;
+    char *parent = NULL;
+    char *ret = NULL;
+
+    if((copy = strdup(path)) == NULL)
+    {
+        log_errorx ("out of memory");
+        goto finally;
+    }
+
+    if((parent = dirname(copy)) == NULL)
+        goto finally;
+    
+    if(parent == copy)
+    {
+        ret = parent;
+        copy = NULL;
+    }
+    else
+    {
+        if((ret = strdup(parent)) == NULL)
+        {
+            log_errorx ("out of memory");
+            goto finally;
+        }
+    }
+
+finally:
+    if(copy)
+        free(copy);
+
+    return ret;
+}
+
+/* Function with behaviour like `mkdir -p'  */
+int mkdir_p(const char *path, mode_t mode)
+{
+    int ret = -1;
+    char *parent = NULL;
+
+    if((parent = get_parent(path)) == NULL)
+        goto finally;
+
+    /* Check whether we've reached the root */
+    if(strcmp(parent, path) == 0)
+    {
+        ret = 0;
+        goto finally;
+    }
+
+    if((mkdir_p(parent, mode) == -1) && (errno != EEXIST))
+        goto finally;
+
+    log_debug ("creating directory: %s", path);
+    if((mkdir(path, mode) == -1) && (errno != EEXIST))
+        goto finally;
+    
+    ret = 0;
+
+finally:
+    if(parent)
+        free(parent);
+
+    return ret;
+}
+
 void rb_rrd_update(rb_poller *poll)
 {
     char buf[MAX_NUMLEN];
     const char* argv[5];
     char* template;
     char* items;
-    char* c;
     int r, tlen, ilen;
     rb_item *item;
     file_path *rrdpath;
@@ -146,6 +214,7 @@ void rb_rrd_update(rb_poller *poll)
     for(rawpath = poll->rawlist; rawpath; rawpath = rawpath->next) {
         for(item = poll->items; item; item = item->next) {
             char path[MAXPATHLEN];
+            char *parent = NULL;
             FILE *fp;
             struct tm *timeinfo;
             time_t time;
@@ -166,6 +235,19 @@ void rb_rrd_update(rb_poller *poll)
 
             log_debug ("updating RAW file: %s -> %s", rawpath->path, path);
 
+            /* try to ensure directory exists */
+            if((parent = get_parent(path)) == NULL)
+                return;
+            if((mkdir_p(parent, 0777) == -1) && (errno != EEXIST))
+            {
+                log_errorx("couldn't create directory for raw file: %s : %s",
+                            path,  strerror(errno));
+                free(parent);
+                /* Try the next item */
+                continue;
+            }
+            free(parent);
+        
             fp = fopen(path, "a");
             if(fp == NULL)
             {
