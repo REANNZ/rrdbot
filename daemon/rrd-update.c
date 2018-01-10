@@ -232,8 +232,7 @@ void rb_rrd_update(rb_poller *poll)
 
             if(len == 0)
             {
-                log_errorx("couldn't strftime the raw file path: %s for writting : %s",
-                            rawpath->path, strerror(errno));
+                log_errorx("raw file: %s: strftime: %s", rawpath->path, strerror(errno));
                 break; /* next raw file */
             }
 
@@ -244,8 +243,7 @@ void rb_rrd_update(rb_poller *poll)
                 return;
             if((mkdir_p(parent, 0777) == -1) && (errno != EEXIST))
             {
-                log_errorx("couldn't create directory for raw file: %s : %s",
-                            path,  strerror(errno));
+                log_errorx("raw file: %s: mkdir: %s", path, strerror(errno));
                 free(parent);
                 break; /* next raw file */
             }
@@ -253,14 +251,14 @@ void rb_rrd_update(rb_poller *poll)
 
             fd = open(path, O_WRONLY|O_APPEND|O_CREAT, 0644);
             if(fd == -1) {
-                log_errorx("open raw file for append failed: %s: %s", path, strerror(errno));
+                log_errorx("raw file: %s: open: %s", path, strerror(errno));
                 break; /* next raw file */
             }
 
 	    write_sample(fd, path, &time, item);
 
 	    if (close(fd) == -1) {
-		    log_errorx("close of raw file failed: %s: %s", path, strerror(errno));
+		    log_errorx("raw file: %s: close: %s", path, strerror(errno));
 	    }
         }
     }
@@ -310,7 +308,7 @@ write_sample(int fd, const char* path, const time_t *time, const rb_item *item)
 	}
 
 	if ((nw = write(fd, buf, n)) == -1 || nw != n) {
-		log_errorx("write to raw file failed: %s: %s", path, strerror(errno));
+		log_errorx("raw file: %s: write: %s", path, strerror(errno));
 		return;
 	}
 }
