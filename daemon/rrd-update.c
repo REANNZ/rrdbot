@@ -251,7 +251,7 @@ void rb_rrd_update(rb_poller *poll)
             }
             free(parent);
 
-            fd = open(path, O_WRONLY|O_APPEND|O_CREAT);
+            fd = open(path, O_WRONLY|O_APPEND|O_CREAT, 0644);
             if(fd == -1) {
                 log_errorx("open raw file for append failed: %s: %s", path, strerror(errno));
                 break; /* next raw file */
@@ -270,6 +270,7 @@ static void
 write_sample(int fd, const char* path, const time_t *time, const rb_item *item)
 {
 	char buf[RAW_BUFLEN];
+	ssize_t nw;
 	int n;
 
 	switch (item->vtype) {
@@ -308,7 +309,7 @@ write_sample(int fd, const char* path, const time_t *time, const rb_item *item)
 		return;
 	}
 
-	if (write(fd, buf, strlen(buf)) == -1) {
+	if ((nw = write(fd, buf, n)) == -1 || nw != n) {
 		log_errorx("write to raw file failed: %s: %s", path, strerror(errno));
 		return;
 	}
