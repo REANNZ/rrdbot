@@ -250,16 +250,18 @@ void rb_rrd_update(rb_poller *poll)
             free(parent);
 
             fd = open(path, O_WRONLY|O_APPEND|O_CREAT, 0644);
-            if(fd == -1) {
+            if(fd == -1)
+            {
                 log_errorx("raw file: %s: open: %s", path, strerror(errno));
                 break; /* next raw file */
             }
 
-	    write_sample(fd, path, &time, item);
+            write_sample(fd, path, &time, item);
 
-	    if (close(fd) == -1) {
-		    log_errorx("raw file: %s: close: %s", path, strerror(errno));
-	    }
+            if (close(fd) == -1)
+            {
+                log_errorx("raw file: %s: close: %s", path, strerror(errno));
+            }
         }
     }
 }
@@ -267,48 +269,48 @@ void rb_rrd_update(rb_poller *poll)
 static void
 write_sample(int fd, const char* path, const time_t *time, const rb_item *item)
 {
-	char buf[RAW_BUFLEN];
-	ssize_t nw;
-	int n;
+    char buf[RAW_BUFLEN];
+    ssize_t nw;
+    int n;
 
-	switch (item->vtype) {
-	case VALUE_REAL:
-		n = snprintf(buf, sizeof(buf), "%"PRId64"\t%s\t%"PRId64"\n",
-		    *time,
-		    (item->reference ? item->reference : item->field),
-		    item->v.i_value);
-		break;
+    switch (item->vtype) {
+    case VALUE_REAL:
+        n = snprintf(buf, sizeof(buf), "%"PRId64"\t%s\t%"PRId64"\n",
+          *time,
+          (item->reference ? item->reference : item->field),
+          item->v.i_value);
+        break;
 
-	case VALUE_FLOAT:
-		n = snprintf(buf, sizeof(buf), "%"PRId64"\t%s\t%.4lf\n",
-		    *time,
-		    (item->reference ? item->reference : item->field),
-		    item->v.f_value);
-		break;
+    case VALUE_FLOAT:
+        n = snprintf(buf, sizeof(buf), "%"PRId64"\t%s\t%.4lf\n",
+          *time,
+          (item->reference ? item->reference : item->field),
+          item->v.f_value);
+        break;
 
-	case VALUE_UNSET:
-		n = snprintf(buf, sizeof(buf), "%"PRId64"\t%s\t\n",
-		    *time,
-		    (item->reference ? item->reference : item->field));
-		break;
+    case VALUE_UNSET:
+        n = snprintf(buf, sizeof(buf), "%"PRId64"\t%s\t\n",
+          *time,
+          (item->reference ? item->reference : item->field));
+        break;
 
-	default:
-		log_errorx("raw file: %s: unknown sample value type: %d", path, item->vtype);
-		return;
-	}
+    default:
+        log_errorx("raw file: %s: unknown sample value type: %d", path, item->vtype);
+        return;
+    }
 
-	if (n == -1) {
-		log_errorx("raw file: %s: snprintf: %s", path, strerror(errno));
-		return;
-	}
+    if (n == -1) {
+        log_errorx("raw file: %s: snprintf: %s", path, strerror(errno));
+        return;
+    }
 
-	if (n >= sizeof(buf)) {
-		log_errorx("raw file: %s: truncated sample string: required: %d", path, n);
-		return;
-	}
+    if (n >= sizeof(buf)) {
+        log_errorx("raw file: %s: truncated sample string: required: %d", path, n);
+        return;
+    }
 
-	if ((nw = write(fd, buf, n)) == -1 || nw != n) {
-		log_errorx("raw file: %s: write: %s", path, strerror(errno));
-		return;
-	}
+    if ((nw = write(fd, buf, n)) == -1 || nw != n) {
+        log_errorx("raw file: %s: write: %s", path, strerror(errno));
+        return;
+    }
 }
