@@ -289,7 +289,7 @@ write_sample(int fd, const char* path, const time_t *time, const rb_item *item)
 		break;
 
 	case VALUE_UNSET:
-		n = snprintf(buf, sizeof(buf), "%"PRId64"\t%s\n",
+		n = snprintf(buf, sizeof(buf), "%"PRId64"\t%s\t\n",
 		    *time,
 		    (item->reference ? item->reference : item->field));
 		break;
