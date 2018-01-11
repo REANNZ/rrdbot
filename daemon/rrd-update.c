@@ -151,7 +151,6 @@ void rb_rrd_update(rb_poller *poll)
     for(rawpath = poll->rawlist; rawpath; rawpath = rawpath->next) {
         for(item = poll->items; item; item = item->next) {
             char path[MAXPATHLEN];
-            char *parent = NULL;
             int fd;
             struct tm *timeinfo;
             time_t time;
