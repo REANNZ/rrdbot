@@ -54,7 +54,7 @@
 #define MAX_NUMLEN 40
 #define RAW_BUFLEN 768
 
-static void write_sample(int fd, const char* path, const time_t *time, const rb_item *item);
+static void write_sample(int, const time_t*, const rb_item*, const char*);
 
 char* get_parent(const char *path)
 {
@@ -249,14 +249,13 @@ void rb_rrd_update(rb_poller *poll)
             }
             free(parent);
 
-            fd = open(path, O_WRONLY|O_APPEND|O_CREAT, 0644);
-            if(fd == -1)
+            if((fd = open(path, O_WRONLY|O_APPEND|O_CREAT, 0644)) == -1)
             {
                 log_errorx("raw file: %s: open: %s", path, strerror(errno));
                 break; /* next raw file */
             }
 
-            write_sample(fd, path, &time, item);
+            write_sample(fd, &time, item, path /* for logging */);
 
             if (close(fd) == -1)
             {
@@ -267,7 +266,7 @@ void rb_rrd_update(rb_poller *poll)
 }
 
 static void
-write_sample(int fd, const char* path, const time_t *time, const rb_item *item)
+write_sample(int fd, const time_t *time, const rb_item *item, const char* fd_path)
 {
     char buf[RAW_BUFLEN];
     ssize_t nw;
@@ -295,22 +294,27 @@ write_sample(int fd, const char* path, const time_t *time, const rb_item *item)
         break;
 
     default:
-        log_errorx("raw file: %s: unknown sample value type: %d", path, item->vtype);
+        log_errorx("raw file: %s: unknown sample value type: %d", fd_path, item->vtype);
         return;
     }
 
     if (n == -1) {
-        log_errorx("raw file: %s: snprintf: %s", path, strerror(errno));
+        log_errorx("raw file: %s: snprintf: %s", fd_path, strerror(errno));
         return;
     }
 
     if (n >= sizeof(buf)) {
-        log_errorx("raw file: %s: truncated sample string: required: %d", path, n);
+        log_errorx("raw file: %s: truncated sample string: required: %d", fd_path, n);
         return;
     }
 
-    if ((nw = write(fd, buf, n)) == -1 || nw != n) {
-        log_errorx("raw file: %s: write: %s", path, strerror(errno));
+    if ((nw = write(fd, buf, n)) == -1) {
+        log_errorx("raw file: %s: write: %s", fd_path, strerror(errno));
+        return;
+    }
+
+    if (nw != n) {
+        log_errorx("raw file: %s: partial write: %d of %d", fd_path, nw, n);
         return;
     }
 }
