@@ -42,6 +42,8 @@
 #include <syslog.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <stdio.h>
 #include <libgen.h>
 
 #include <rrd.h>
@@ -50,6 +52,9 @@
 #include "rrdbotd.h"
 
 #define MAX_NUMLEN 40
+#define RAW_BUFLEN 768
+
+static void write_sample(int, const time_t*, const rb_item*, const char*);
 
 char* get_parent(const char *path)
 {
@@ -215,7 +220,7 @@ void rb_rrd_update(rb_poller *poll)
         for(item = poll->items; item; item = item->next) {
             char path[MAXPATHLEN];
             char *parent = NULL;
-            FILE *fp;
+            int fd;
             struct tm *timeinfo;
             time_t time;
             size_t len;
@@ -227,10 +232,8 @@ void rb_rrd_update(rb_poller *poll)
 
             if(len == 0)
             {
-                log_errorx("couldn't strftime the raw file path: %s for writting : %s",
-                            rawpath->path, strerror(errno));
-                /* Try the next raw file */
-                continue;
+                log_errorx("raw file: %s: strftime: %s", rawpath->path, strerror(errno));
+                break; /* next raw file */
             }
 
             log_debug ("updating RAW file: %s -> %s", rawpath->path, path);
@@ -240,37 +243,78 @@ void rb_rrd_update(rb_poller *poll)
                 return;
             if((mkdir_p(parent, 0777) == -1) && (errno != EEXIST))
             {
-                log_errorx("couldn't create directory for raw file: %s : %s",
-                            path,  strerror(errno));
+                log_errorx("raw file: %s: mkdir: %s", path, strerror(errno));
                 free(parent);
-                /* Try the next item */
-                continue;
+                break; /* next raw file */
             }
             free(parent);
-        
-            fp = fopen(path, "a");
-            if(fp == NULL)
+
+            if((fd = open(path, O_WRONLY|O_APPEND|O_CREAT, 0644)) == -1)
             {
-                log_errorx("couldn't open raw file: %s for writing : %s",
-                            path,  strerror(errno));
-                /* Try the next item */
-                continue;
+                log_errorx("raw file: %s: open: %s", path, strerror(errno));
+                break; /* next raw file */
             }
 
-            /* Write item record to raw file */
-            fprintf(fp, "%" PRId64 "\t", time);
-            if(item->reference)
-                fprintf(fp, "%s", item->reference);
-            else
-                fprintf(fp, "%s", item->field);
-            fprintf(fp, "\t");
-            if(item->vtype == VALUE_REAL)
-                fprintf(fp, "%" PRId64, item->v.i_value);
-            else if(item->vtype == VALUE_FLOAT)
-                fprintf(fp, "%.4lf", item->v.f_value);
-            fprintf(fp, "\n");
+            write_sample(fd, &time, item, path /* for logging */);
 
-            fclose(fp);
+            if (close(fd) == -1)
+            {
+                log_errorx("raw file: %s: close: %s", path, strerror(errno));
+            }
         }
+    }
+}
+
+static void
+write_sample(int fd, const time_t *time, const rb_item *item, const char* fd_path)
+{
+    char buf[RAW_BUFLEN];
+    ssize_t nw;
+    int n;
+
+    switch (item->vtype) {
+    case VALUE_REAL:
+        n = snprintf(buf, sizeof(buf), "%"PRId64"\t%s\t%"PRId64"\n",
+          *time,
+          (item->reference ? item->reference : item->field),
+          item->v.i_value);
+        break;
+
+    case VALUE_FLOAT:
+        n = snprintf(buf, sizeof(buf), "%"PRId64"\t%s\t%.4lf\n",
+          *time,
+          (item->reference ? item->reference : item->field),
+          item->v.f_value);
+        break;
+
+    case VALUE_UNSET:
+        n = snprintf(buf, sizeof(buf), "%"PRId64"\t%s\t\n",
+          *time,
+          (item->reference ? item->reference : item->field));
+        break;
+
+    default:
+        log_errorx("raw file: %s: unknown sample value type: %d", fd_path, item->vtype);
+        return;
+    }
+
+    if (n == -1) {
+        log_errorx("raw file: %s: snprintf: %s", fd_path, strerror(errno));
+        return;
+    }
+
+    if (n >= sizeof(buf)) {
+        log_errorx("raw file: %s: truncated sample string: required: %d", fd_path, n);
+        return;
+    }
+
+    if ((nw = write(fd, buf, n)) == -1) {
+        log_errorx("raw file: %s: write: %s", fd_path, strerror(errno));
+        return;
+    }
+
+    if (nw != n) {
+        log_errorx("raw file: %s: partial write: %d of %d", fd_path, nw, n);
+        return;
     }
 }
