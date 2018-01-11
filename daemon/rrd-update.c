@@ -56,74 +56,6 @@
 
 static void write_sample(int, const time_t*, const rb_item*, const char*);
 
-char* get_parent(const char *path)
-{
-    char *copy = NULL;
-    char *parent = NULL;
-    char *ret = NULL;
-
-    if((copy = strdup(path)) == NULL)
-    {
-        log_errorx ("out of memory");
-        goto finally;
-    }
-
-    if((parent = dirname(copy)) == NULL)
-        goto finally;
-    
-    if(parent == copy)
-    {
-        ret = parent;
-        copy = NULL;
-    }
-    else
-    {
-        if((ret = strdup(parent)) == NULL)
-        {
-            log_errorx ("out of memory");
-            goto finally;
-        }
-    }
-
-finally:
-    if(copy)
-        free(copy);
-
-    return ret;
-}
-
-/* Function with behaviour like `mkdir -p'  */
-int mkdir_p(const char *path, mode_t mode)
-{
-    int ret = -1;
-    char *parent = NULL;
-
-    if((parent = get_parent(path)) == NULL)
-        goto finally;
-
-    /* Check whether we've reached the root */
-    if(strcmp(parent, path) == 0)
-    {
-        ret = 0;
-        goto finally;
-    }
-
-    if((mkdir_p(parent, mode) == -1) && (errno != EEXIST))
-        goto finally;
-
-    log_debug ("creating directory: %s", path);
-    if((mkdir(path, mode) == -1) && (errno != EEXIST))
-        goto finally;
-    
-    ret = 0;
-
-finally:
-    if(parent)
-        free(parent);
-
-    return ret;
-}
-
 void rb_rrd_update(rb_poller *poll)
 {
     char buf[MAX_NUMLEN];
@@ -237,17 +169,6 @@ void rb_rrd_update(rb_poller *poll)
             }
 
             log_debug ("updating RAW file: %s -> %s", rawpath->path, path);
-
-            /* try to ensure directory exists */
-            if((parent = get_parent(path)) == NULL)
-                return;
-            if((mkdir_p(parent, 0777) == -1) && (errno != EEXIST))
-            {
-                log_errorx("raw file: %s: mkdir: %s", path, strerror(errno));
-                free(parent);
-                break; /* next raw file */
-            }
-            free(parent);
 
             if((fd = open(path, O_WRONLY|O_APPEND|O_CREAT, 0644)) == -1)
             {
