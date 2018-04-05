@@ -1,0 +1,257 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          rrdbot         -  make pretty pix for weathermap?
+# Required-Start:    $network $syslog
+# Required-Stop:     $network $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: make rrd stuff
+### END INIT INFO
+
+# Author: Andrej Ricnik <andrej.ricnik@reannz.co.nz>
+# Date:	  2013/08/23
+
+# Do NOT "set -e"
+
+# This starts an rrdbot process for each ${CONFDIR}/tranch_* directory. These
+# directories are expected to contain config files, or symlinks to config files. 
+# This thereby evades various design limitations in rrdbot on larger networks 
+# (e.g. > 60,000 polls per minute).  
+
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+# This script runs rrdbotd in UTC!        #
+#  - This way we avoid DST for raw files  #
+#    so every day is 24hr.                #
+#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#!#
+
+export TZ=UTC
+
+# PATH should only include /usr/* if it runs after the mountnfs.sh script
+PATH=/usr/local/bin:/usr/local/sbin:/sbin:/usr/sbin:/bin:/usr/bin
+DESC="make rrd stuff"
+NAME=rrdbotd
+PIDDIR=/var/run/rrdbotd
+CONFDIR=/rrd/conf
+DAEMON=/usr/local/sbin/$NAME
+DAEMON_USER=rrdbot
+SCRIPTNAME=/etc/init.d/$NAME
+
+SUCCESS=0
+FAIL=1
+
+# Exit if the package is not installed
+if [ ! -x "$DAEMON" ]; then
+    echo "could not find ${DAEMON}"
+    exit 0
+fi
+
+# Read configuration variable file if it is present
+[ -r /etc/default/$NAME ] && . /etc/default/$NAME
+
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.2-14) to ensure that this file is present
+# and status_of_proc is working.
+. /lib/lsb/init-functions
+
+len() {
+    echo $#
+}
+
+instance_pidfile() {
+    # rrdbotd_instance_number -> pid_filename
+    #
+    # we need PID files here in order to distinguish
+    # the processes to the start-stop-daemon command
+    echo "${PIDDIR}/${NAME}.${1}.pid"
+}
+
+instance_running() {
+    ! start-stop-daemon -b -c ${DAEMON_USER} --start --quiet \
+        --pidfile $(instance_pidfile $1) --exec ${DAEMON} --test > /dev/null
+}
+
+configured_instances() {
+    # returns: a list of configured instances at last start, by instance number
+    # the configured instances are recorded in ${PIDDIR}/tranch_* on start.
+    # This lets us know which instances should be running; PID files insuffice
+    # as they are deleted when the daemon exits.
+    ( shopt -s nullglob
+      for x in ${PIDDIR}/tranch_*; do
+	  echo $x | cut -f 2 -d '_';
+      done )
+}
+
+running() { # ==  n_configured > 0  /\  <A x: configured.x : running.x>
+    if [ $(len $(configured_instances)) = 0 ]; then
+	return 1 # running = false
+    fi
+
+    for i in $(configured_instances); do
+	if ! instance_running $i; then
+	    return 1 # running = false
+	fi;
+    done
+
+    return 0; # running = true
+
+}
+
+stopped() { # ==  n_configured = 0  \/  <A x : configured.x : !running.x>
+    for i in $(configured_instances); do
+	if instance_running $i; then
+	    return 1 # stopped = false
+	fi;
+    done
+
+    return 0 # stopped = true
+}
+
+start_rrdbot_instance() {
+    local PIDFILE=$(instance_pidfile ${1})
+    local CONFDIR=$2
+
+    start-stop-daemon -c ${DAEMON_USER} --start --quiet --pidfile ${PIDFILE} --exec ${DAEMON} \
+		      -- -c ${CONFDIR} -p ${PIDFILE}
+}
+
+stop_rrdbot_instance() {
+    local PIDFILE=$(instance_pidfile ${1})
+    start-stop-daemon -u ${DAEMON_USER} --oknodo --stop --quiet --retry=TERM/30/KILL/5 --pidfile ${PIDFILE} --exec ${DAEMON}
+    local RESULT=$?
+    rm -f ${PIDFILE}
+
+    return $RESULT
+}
+
+#
+# Function that starts the daemon/service
+#
+do_start() {
+    # Return
+    #   0 if daemon has been started
+    #   1 if daemon was already running
+    #   2 if daemon could not be started
+
+    if running; then
+	return 1
+    fi;
+
+    if ! stopped; then
+	do_stop
+    fi;
+
+    # configure instances
+    rm -f ${PIDDIR}/tranch_*
+    for x in $(basename -a $(ls -d ${CONFDIR}/tranch_*)); do
+	touch ${PIDDIR}/$x
+    done
+
+    # start configured instances
+    n=0
+    for i in $(configured_instances); do
+	if ! start_rrdbot_instance $n ${CONFDIR}/tranch_${i}; then
+	    do_stop
+	    return 2
+	fi
+	n=$((n+1))
+    done
+
+    return 0
+}
+
+#
+# Function that stops the daemon/service
+#
+do_stop() {
+    # Return
+    #   0 if daemon has been stopped
+    #   1 if daemon was already stopped
+    #   2 if daemon could not be stopped
+    #   other if a failure occurred
+
+    if stopped; then
+	return 1
+    fi
+
+    RETVAL=0
+    for i in $(configured_instances); do
+	if ! stop_rrdbot_instance $i; then
+	    RETVAL=2
+	fi
+    done
+
+    rm -f ${PIDDIR}/tranch_*
+
+    return ${RETVAL}
+}
+
+do_status() {
+    echo "There are $(len $(configured_instances)) configured rrdbotd sub-processes"
+    for i in $(configured_instances); do
+	echo "rrdbotd process ${i}:"
+	status_of_proc -p "$(instance_pidfile ${i})" "${DAEMON}" "${NAME}" || return $?
+    done;
+}
+
+case "$1" in
+  start)
+	[ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC" "$NAME"
+	do_start
+	case "$?" in
+		0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+		2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+	esac
+	;;
+  stop)
+	[ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC" "$NAME"
+	do_stop
+	case "$?" in
+		0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+		2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+	esac
+	;;
+  status)
+       do_status && exit 0 || exit $?
+       ;;
+  #reload|force-reload)
+	#
+	# If do_reload() is not implemented then leave this commented out
+	# and leave 'force-reload' as an alias for 'restart'.
+	#
+	#log_daemon_msg "Reloading $DESC" "$NAME"
+	#do_reload
+	#log_end_msg $?
+	#;;
+  restart|force-reload)
+	#
+	# If the "reload" option is implemented then remove the
+	# 'force-reload' alias
+	#
+	log_daemon_msg "Restarting $DESC" "$NAME"
+	do_stop
+	case "$?" in
+	  0|1)
+		do_start
+		case "$?" in
+			0) log_end_msg 0 ;;
+			1) log_end_msg 1 ;; # Old process is still running
+			*) log_end_msg 1 ;; # Failed to start
+		esac
+		;;
+	  *)
+	  	# Failed to stop
+		log_end_msg 1
+		;;
+	esac
+	;;
+  *)
+	#echo "Usage: $SCRIPTNAME {start|stop|restart|reload|force-reload}" >&2
+	echo "Usage: $SCRIPTNAME {start|stop|status|restart|force-reload}" >&2
+	exit 3
+	;;
+esac
+
+:
