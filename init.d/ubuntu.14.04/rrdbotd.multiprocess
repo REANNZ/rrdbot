@@ -34,6 +34,7 @@ PIDDIR=/var/run/rrdbotd
 CONFDIR=/rrd/conf
 DAEMON=/usr/local/sbin/$NAME
 DAEMON_USER=rrdbot
+DAEMON_GROUP=rrdbot
 SCRIPTNAME=/etc/init.d/$NAME
 
 SUCCESS=0
@@ -142,6 +143,9 @@ do_start() {
     if ! stopped; then
 	do_stop
     fi;
+
+    mkdir -p ${PIDDIR}
+    chown ${DAEMON_USER}.${DAEMON_GROUP} ${PIDDIR}
 
     # configure instances
     rm -f ${PIDDIR}/tranch_*
