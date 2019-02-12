@@ -223,7 +223,6 @@ static void
 field_response (int request, int code, struct snmp_value *value, void *arg)
 {
 	rb_item *item = arg;
-	const char *msg = NULL;
 	mstime when;
 
 	ASSERT (request == item->field_request);
@@ -262,27 +261,28 @@ field_response (int request, int code, struct snmp_value *value, void *arg)
 			break;
 		case SNMP_SYNTAX_OCTETSTRING:
 			if (!parse_string_value(value, item))
-				msg = "snmp server returned non numeric value for field: %s";
+				log_warnx("snmp server returned non numeric value for field: %s",
+				    item->field);
 			break;
 		case SNMP_SYNTAX_OID:
-			msg = "snmp server returned a oid value for field: %s";
+			log_warnx("snmp server returned a oid value for field: %s", item->field);
 			break;
 		case SNMP_SYNTAX_IPADDRESS:
-			msg = "snmp server returned a ip address value for field: %s";
+			log_warnx("snmp server returned a ip address value for field: %s",
+			    item->field);
 			break;
 		case SNMP_SYNTAX_NOSUCHOBJECT:
 		case SNMP_SYNTAX_NOSUCHINSTANCE:
 		case SNMP_SYNTAX_ENDOFMIBVIEW:
-			msg = "field not available on snmp server: %s";
+			log_warnx("field not available on snmp server: %s", item->field);
 			break;
 		default:
-			msg = "snmp server returned invalid or unsupported value for field: %s";
+			log_warnx("snmp server returned invalid or unsupported value for field: %s",
+			    item->field);
 			break;
 		};
 
-		if (msg)
-			log_warnx (msg, item->field);
-		else if (item->vtype == VALUE_REAL)
+		if (item->vtype == VALUE_REAL)
 			log_debug ("got value for field '%s': %lld",
 			           item->field, item->v.i_value);
 		else if (item->vtype == VALUE_FLOAT)
