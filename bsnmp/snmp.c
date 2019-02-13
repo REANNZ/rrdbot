@@ -670,61 +670,46 @@ dump_binding(const struct snmp_value *b)
 	char buf[ASN_OIDSTRLEN];
 
 	snmp_printf("%s=", asn_oid2str_r(&b->var, buf));
+	snmp_printf("%s", snmp_get_syntaxmsg(b->syntax));
+
 	switch (b->syntax) {
-
-	  case SNMP_SYNTAX_NULL:
-		snmp_printf("NULL");
-		break;
-
 	  case SNMP_SYNTAX_INTEGER:
-		snmp_printf("INTEGER %d", b->v.integer);
+		snmp_printf(" %d", b->v.integer);
 		break;
 
 	  case SNMP_SYNTAX_OCTETSTRING:
-		snmp_printf("OCTET STRING %lu:", b->v.octetstring.len);
+		snmp_printf(" %lu:", b->v.octetstring.len);
 		for (i = 0; i < b->v.octetstring.len; i++)
 			snmp_printf(" %02x", b->v.octetstring.octets[i]);
 		break;
 
 	  case SNMP_SYNTAX_OID:
-		snmp_printf("OID %s", asn_oid2str_r(&b->v.oid, buf));
+		snmp_printf(" %s", asn_oid2str_r(&b->v.oid, buf));
 		break;
 
 	  case SNMP_SYNTAX_IPADDRESS:
-		snmp_printf("IPADDRESS %u.%u.%u.%u", b->v.ipaddress[0],
+		snmp_printf(" %u.%u.%u.%u", b->v.ipaddress[0],
 		    b->v.ipaddress[1], b->v.ipaddress[2], b->v.ipaddress[3]);
 		break;
 
-	  case SNMP_SYNTAX_COUNTER:
-		snmp_printf("COUNTER %u", b->v.uint32);
-		break;
-
-	  case SNMP_SYNTAX_GAUGE:
-		snmp_printf("GAUGE %u", b->v.uint32);
-		break;
-
+	  case SNMP_SYNTAX_COUNTER:         /* FALLTHROUGH */
+	  case SNMP_SYNTAX_GAUGE:           /* FALLTHROUGH */
 	  case SNMP_SYNTAX_TIMETICKS:
-		snmp_printf("TIMETICKS %u", b->v.uint32);
+		snmp_printf(" %u", b->v.uint32);
 		break;
 
 	  case SNMP_SYNTAX_COUNTER64:
-		snmp_printf("COUNTER64 %lld", b->v.counter64);
+		snmp_printf(" %lld", b->v.counter64);
 		break;
 
-	  case SNMP_SYNTAX_NOSUCHOBJECT:
-		snmp_printf("NoSuchObject");
-		break;
-
-	  case SNMP_SYNTAX_NOSUCHINSTANCE:
-		snmp_printf("NoSuchInstance");
-		break;
-
+	  case SNMP_SYNTAX_NULL:            /* FALLTHROUGH */
+	  case SNMP_SYNTAX_NOSUCHOBJECT:    /* FALLTHROUGH */
+	  case SNMP_SYNTAX_NOSUCHINSTANCE:  /* FALLTHROUGH */
 	  case SNMP_SYNTAX_ENDOFMIBVIEW:
-		snmp_printf("EndOfMibView");
 		break;
 
 	  default:
-		snmp_printf("UNKNOWN SYNTAX %u", b->syntax);
+		snmp_printf("(%u)", b->syntax);
 		break;
 	}
 }
@@ -1129,6 +1114,38 @@ snmp_printf_func(const char *fmt, ...)
 /* -----------------------------------------------------------------------------
  * ERR MESSAGE HANDLING
  */
+
+static struct
+{
+    enum snmp_syntax syntax;
+    const char* msg;
+} snmp_syntaxmsgs[] = {
+    { SNMP_SYNTAX_NULL, "NULL" },
+    { SNMP_SYNTAX_INTEGER, "INTEGER" },
+    { SNMP_SYNTAX_OCTETSTRING, "OCTETSTRING" },
+    { SNMP_SYNTAX_OID, "OID" },
+    { SNMP_SYNTAX_IPADDRESS, "IPADDRESS" },
+    { SNMP_SYNTAX_COUNTER, "COUNTER" },
+    { SNMP_SYNTAX_GAUGE, "GAUGE" },
+    { SNMP_SYNTAX_TIMETICKS, "TIMETICKS" },
+    { SNMP_SYNTAX_COUNTER64, "COUNTER64" },
+    { SNMP_SYNTAX_NOSUCHOBJECT, "NoSuchObject" },
+    { SNMP_SYNTAX_NOSUCHINSTANCE, "NoSuchInstance" },
+    { SNMP_SYNTAX_ENDOFMIBVIEW, "EndOfMibView" }
+};
+
+const char*
+snmp_get_syntaxmsg (enum snmp_syntax syntax)
+{
+    int i;
+    for(i = 0; i < sizeof(snmp_syntaxmsgs) / sizeof(snmp_syntaxmsgs[0]); i++)
+    {
+        if(syntax == snmp_syntaxmsgs[i].syntax)
+            return snmp_syntaxmsgs[i].msg;
+    }
+    return "*UnknownSyntax*";
+}
+
 
 /* All SNMP error messages */
 static struct

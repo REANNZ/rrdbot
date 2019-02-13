@@ -224,6 +224,7 @@ field_response (int request, int code, struct snmp_value *value, void *arg)
 {
 	rb_item *item = arg;
 	mstime when;
+	char asnbuf[ASN_OIDSTRLEN];
 
 	ASSERT (request == item->field_request);
 
@@ -249,8 +250,8 @@ field_response (int request, int code, struct snmp_value *value, void *arg)
 			item->v.i_value = value->v.integer;
 			item->vtype = VALUE_REAL;
 			break;
-		case SNMP_SYNTAX_COUNTER:
-		case SNMP_SYNTAX_GAUGE:
+		case SNMP_SYNTAX_COUNTER:       /* FALLTHROUGH */
+		case SNMP_SYNTAX_GAUGE:         /* FALLTHROUGH */
 		case SNMP_SYNTAX_TIMETICKS:
 			item->v.i_value = value->v.uint32;
 			item->vtype = VALUE_REAL;
@@ -260,25 +261,21 @@ field_response (int request, int code, struct snmp_value *value, void *arg)
 			item->vtype = VALUE_REAL;
 			break;
 		case SNMP_SYNTAX_OCTETSTRING:
-			if (!parse_string_value(value, item))
-				log_warnx("snmp server returned non numeric value for field: %s",
-				    item->field);
-			break;
-		case SNMP_SYNTAX_OID:
-			log_warnx("snmp server returned a oid value for field: %s", item->field);
-			break;
-		case SNMP_SYNTAX_IPADDRESS:
-			log_warnx("snmp server returned a ip address value for field: %s",
-			    item->field);
-			break;
-		case SNMP_SYNTAX_NOSUCHOBJECT:
-		case SNMP_SYNTAX_NOSUCHINSTANCE:
-		case SNMP_SYNTAX_ENDOFMIBVIEW:
-			log_warnx("field not available on snmp server: %s", item->field);
-			break;
+			if (parse_string_value(value, item))
+				break;
+			/* FALLTHROUGH */
+		case SNMP_SYNTAX_OID: 		/* FALLTHROUGH */
+		case SNMP_SYNTAX_IPADDRESS:	/* FALLTHROUGH */
+		case SNMP_SYNTAX_NOSUCHOBJECT:	/* FALLTHROUGH */
+		case SNMP_SYNTAX_NOSUCHINSTANCE:/* FALLTHROUGH */
+		case SNMP_SYNTAX_ENDOFMIBVIEW:	/* FALLTHROUGH */
 		default:
-			log_warnx("snmp server returned invalid or unsupported value for field: %s",
-			    item->field);
+			log_warnx("snmp server %s: oid %s: field %s: response %s(%u)",
+			    item->hostnames[item->hostindex],
+			    asn_oid2str_r(&item->field_oid, asnbuf),
+			    item->field,
+			    snmp_get_syntaxmsg(value->syntax),
+			    value->syntax);
 			break;
 		};
 

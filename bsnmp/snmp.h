@@ -173,5 +173,6 @@ extern void (*snmp_printf)(const char *, ...);
 #define TRUTH_OK(T)  ((T) == 1 || (T) == 2)
 
 const char* snmp_get_errmsg (int code);
+const char* snmp_get_syntaxmsg (enum snmp_syntax syntax);
 
 #endif
