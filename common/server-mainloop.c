@@ -38,6 +38,9 @@
 
 #include "server-mainloop.h"
 
+#define timeval_to_ms(tv) \
+    ((((uint64_t)(tv).tv_sec) * 1000L) + (((uint64_t)(tv).tv_usec) / 1000L))
+
 typedef struct _socket_callback
 {
     int fd;
@@ -72,66 +75,6 @@ server_context;
 
 /* Global context */
 static server_context ctx;
-
-static void
-timeval_add(struct timeval* t1, struct timeval* t2)
-{
-    ASSERT(t1->tv_usec < 1000000);
-    ASSERT(t2->tv_usec < 1000000);
-
-    t1->tv_sec += t2->tv_sec;
-    t1->tv_usec += t2->tv_usec;
-    if(t1->tv_usec >= 1000000)
-    {
-        t1->tv_usec -= 1000000;
-        t1->tv_sec += 1;
-    }
-}
-
-static void
-timeval_subtract(struct timeval* t1, struct timeval* t2)
-{
-    ASSERT(t1->tv_usec < 1000000);
-    ASSERT(t2->tv_usec < 1000000);
-
-    t1->tv_sec -= t2->tv_sec;
-    if(t1->tv_usec < t2->tv_usec)
-    {
-        t1->tv_usec += 1000000;
-        t1->tv_sec -= 1;
-    }
-    t1->tv_usec -= t2->tv_usec;
-}
-
-static int
-timeval_compare(struct timeval* t1, struct timeval* t2)
-{
-    ASSERT(t1->tv_usec < 1000000);
-    ASSERT(t2->tv_usec < 1000000);
-
-    if(t1->tv_sec > t2->tv_sec)
-        return 1;
-    else if(t1->tv_sec < t2->tv_sec)
-        return -1;
-    else
-    {
-        if(t1->tv_usec > t2->tv_usec)
-            return 1;
-        else if(t1->tv_usec < t2->tv_usec)
-            return -1;
-        else
-            return 0;
-    }
-}
-
-#define timeval_empty(tv) \
-    ((tv)->tv_sec == 0 && (tv)->tv_usec == 0)
-
-#define timeval_to_ms(tv) \
-    ((((uint64_t)(tv).tv_sec) * 1000L) + (((uint64_t)(tv).tv_usec) / 1000L))
-
-#define timeval_dump(tv) \
-    (fprintf(stderr, "{ %d:%d }", (uint)((tv).tv_sec), (uint)((tv).tv_usec / 1000)))
 
 static int
 add_timer(struct timeval at, int ms, server_timer_callback callback, void* arg)
@@ -277,18 +220,18 @@ server_run()
             ASSERT(timcb->callback);
 
             /* Call any timers that have already passed */
-            if(timeval_compare(&current, &timcb->at) >= 0)
+            if(timercmp(&current, &timcb->at, >=))
             {
                 /* Convert to milliseconds, and make the call */
                 r = (timcb->callback)(timeval_to_ms(current), timcb->arg);
 
                 /* Reset timer if so desired */
-                if (r == 1 && !timeval_empty(&timcb->interval))
+                if (r == 1 && timerisset(&timcb->interval))
                 {
-                    timeval_add(&timcb->at, &timcb->interval);
+                    timeradd(&timcb->at, &timcb->interval, &timcb->at);
 
-                    /* If the time has already passed, just use current time */
-                    if(timeval_compare(&(timcb->at), &current) <= 0)
+                    /* If the new timeout has already passed, reset it to current time */
+                    if(timercmp(&(timcb->at), &current, <=))
                         memcpy(&(timcb->at), &current, sizeof(timcb->at));
                 }
 
@@ -301,7 +244,7 @@ server_run()
             }
 
             /* Get soonest timer */
-            if (!timeout || timeval_compare(&timcb->at, timeout) < 0)
+            if (!timeout || timercmp(&timcb->at, timeout, <))
                 timeout = &timcb->at;
 
             timcb = timcb->next;
@@ -312,12 +255,8 @@ server_run()
         {
             memcpy(&tv, timeout, sizeof(tv));
             timeout = &tv;
-            timeval_subtract(timeout, &current);
+            timersub(timeout, &current, timeout);
         }
-
-        /* fprintf(stderr, "selecting with timeout: ");
-           timeval_dump(timeout);
-           fprintf(stderr, "\n"); */
 
         r = select(ctx.max_fd, &rfds, &wfds, NULL, timeout);
         if (r < 0)
@@ -452,7 +391,7 @@ server_timer(int ms, server_timer_callback callback, void* arg)
     interval.tv_usec = (ms % 1000) * 1000; /* into micro seconds */
 
     at = now;
-    timeval_add(&at, &interval);
+    timeradd(&at, &interval, &at);
 
     return add_timer(at, ms, callback, arg);
 }
