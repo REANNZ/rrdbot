@@ -38,6 +38,7 @@
 
 #include "usuals.h"
 
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <ctype.h>
@@ -645,16 +646,21 @@ rb_poll_engine_init (void)
 	 * 0-interval time. This spreads the polls out over a few seconds.
 	 */
 	rb_poller * poll;
-	int rand_delay;
 	struct timeval now;
 	if (gettimeofday(&now, NULL) == -1) {
 	    err(1, "gettimeofday failed");
 	}
 
 	for (poll = g_state.polls; poll != NULL; poll = poll->next) {
-	        struct timeval start;
-	        start = now;
-		start.tv_sec += rand() % poll->interval;
+	        struct timeval start, offset;
+		int offset_ms;
+
+		offset_ms = rand() % poll->interval;
+		offset.tv_sec = offset_ms / 1000;
+		offset.tv_usec = (offset_ms % 1000) * 1000;
+
+		start = now;
+		timeradd(&start, &offset, &start);
 
 		if (server_timer_at(start, poll->interval, poller_timer, poll) == -1)
 		    err(1, "couldn't setup timer");
