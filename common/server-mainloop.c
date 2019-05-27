@@ -134,12 +134,12 @@ timeval_compare(struct timeval* t1, struct timeval* t2)
     (fprintf(stderr, "{ %d:%d }", (uint)((tv).tv_sec), (uint)((tv).tv_usec / 1000)))
 
 static int
-add_timer(struct timeval at, int ms, int oneshot, server_timer_callback callback, void* arg)
+add_timer(struct timeval at, int ms, server_timer_callback callback, void* arg)
 {
     struct timeval interval;
     timer_callback* cb;
 
-    ASSERT (ms || oneshot);
+    ASSERT (ms);
     ASSERT(callback != NULL);
 
     interval.tv_sec = ms / 1000;
@@ -153,11 +153,7 @@ add_timer(struct timeval at, int ms, int oneshot, server_timer_callback callback
     }
 
     memcpy(&(cb->at), &at, sizeof(cb->at));
-
-    if (oneshot)
-        memset(&(cb->interval), 0, sizeof(cb->interval));
-    else
-        memcpy(&(cb->interval), &interval, sizeof(cb->interval));
+    memcpy(&(cb->interval), &interval, sizeof(cb->interval));
 
     cb->callback = callback;
     cb->arg = arg;
@@ -458,30 +454,11 @@ server_timer(int ms, server_timer_callback callback, void* arg)
     at = now;
     timeval_add(&at, &interval);
 
-    return add_timer(at, ms, 0, callback, arg);
+    return add_timer(at, ms, callback, arg);
 }
 
 int
 server_timer_at(struct timeval at, int ms, server_timer_callback callback, void* arg)
 {
-    return add_timer(at, ms, 0, callback, arg);
-}
-
-int
-server_oneshot(int ms, server_timer_callback callback, void* arg)
-{
-    struct timeval interval;
-    struct timeval at;
-    struct timeval now;
-    if (gettimeofday(&now, NULL) == -1) {
-	err(1, "gettimeofday failed");
-    }
-
-    interval.tv_sec = ms / 1000;
-    interval.tv_usec = (ms % 1000) * 1000; /* into micro seconds */
-
-    at = now;
-    timeval_add(&at, &interval);
-
-    return add_timer(at, ms, 1, callback, arg);
+    return add_timer(at, ms, callback, arg);
 }
