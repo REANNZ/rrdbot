@@ -34,6 +34,7 @@
 #include "usuals.h"
 #include <errno.h>
 #include <sys/time.h>
+#include <err.h>
 
 #include "server-mainloop.h"
 
@@ -133,7 +134,7 @@ timeval_compare(struct timeval* t1, struct timeval* t2)
     (fprintf(stderr, "{ %d:%d }", (uint)((tv).tv_sec), (uint)((tv).tv_usec / 1000)))
 
 static int
-add_timer(int ms, int oneshot, server_timer_callback callback, void* arg)
+add_timer(struct timeval at, int ms, int oneshot, server_timer_callback callback, void* arg)
 {
     struct timeval interval;
     timer_callback* cb;
@@ -151,13 +152,7 @@ add_timer(int ms, int oneshot, server_timer_callback callback, void* arg)
         return -1;
     }
 
-    if(gettimeofday(&(cb->at), NULL) == -1)
-    {
-        free(cb);
-        return -1;
-    }
-
-    timeval_add(&(cb->at), &interval);
+    memcpy(&(cb->at), &at, sizeof(cb->at));
 
     if (oneshot)
         memset(&(cb->interval), 0, sizeof(cb->interval));
@@ -450,11 +445,37 @@ server_unwatch(int fd)
 int
 server_timer(int ms, server_timer_callback callback, void* arg)
 {
-    return add_timer(ms, 0, callback, arg);
+    struct timeval interval;
+    struct timeval at;
+    struct timeval now;
+    if (gettimeofday(&now, NULL) == -1) {
+	err(1, "gettimeofday failed");
+    }
+
+    interval.tv_sec = ms / 1000;
+    interval.tv_usec = (ms % 1000) * 1000; /* into micro seconds */
+
+    at = now;
+    timeval_add(&at, &interval);
+
+    return add_timer(at, ms, 0, callback, arg);
 }
 
 int
 server_oneshot(int ms, server_timer_callback callback, void* arg)
 {
-    return add_timer(ms, 1, callback, arg);
+    struct timeval interval;
+    struct timeval at;
+    struct timeval now;
+    if (gettimeofday(&now, NULL) == -1) {
+	err(1, "gettimeofday failed");
+    }
+
+    interval.tv_sec = ms / 1000;
+    interval.tv_usec = (ms % 1000) * 1000; /* into micro seconds */
+
+    at = now;
+    timeval_add(&at, &interval);
+
+    return add_timer(at, ms, 1, callback, arg);
 }
