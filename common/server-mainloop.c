@@ -95,8 +95,8 @@ add_timer(struct timeval at, int ms, server_timer_callback callback, void* arg)
         return -1;
     }
 
-    memcpy(&(cb->at), &at, sizeof(cb->at));
-    memcpy(&(cb->interval), &interval, sizeof(cb->interval));
+    memcpy(&cb->at, &at, sizeof(cb->at));
+    memcpy(&cb->interval, &interval, sizeof(cb->interval));
 
     cb->callback = callback;
     cb->arg = arg;
