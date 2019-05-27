@@ -77,16 +77,16 @@ server_context;
 static server_context ctx;
 
 static int
-add_timer(struct timeval at, int ms, server_timer_callback callback, void* arg)
+add_timer(struct timeval at, int period_ms, server_timer_callback callback, void* arg)
 {
     struct timeval interval;
     timer_callback* cb;
 
-    ASSERT (ms);
+    ASSERT (period_ms);
     ASSERT(callback != NULL);
 
-    interval.tv_sec = ms / 1000;
-    interval.tv_usec = (ms % 1000) * 1000; /* into micro seconds */
+    interval.tv_sec = period_ms / 1000;
+    interval.tv_usec = (period_ms % 1000) * 1000; /* into micro seconds */
 
     cb = (timer_callback*)calloc(1, sizeof(*cb));
     if(!cb)
@@ -378,7 +378,7 @@ server_unwatch(int fd)
 }
 
 int
-server_timer(int ms, server_timer_callback callback, void* arg)
+server_timer(int period_ms, server_timer_callback callback, void* arg)
 {
     struct timeval interval;
     struct timeval at;
@@ -387,17 +387,17 @@ server_timer(int ms, server_timer_callback callback, void* arg)
 	err(1, "gettimeofday failed");
     }
 
-    interval.tv_sec = ms / 1000;
-    interval.tv_usec = (ms % 1000) * 1000; /* into micro seconds */
+    interval.tv_sec = period_ms / 1000;
+    interval.tv_usec = (period_ms % 1000) * 1000; /* into micro seconds */
 
     at = now;
     timeradd(&at, &interval, &at);
 
-    return add_timer(at, ms, callback, arg);
+    return add_timer(at, period_ms, callback, arg);
 }
 
 int
-server_timer_at(struct timeval at, int ms, server_timer_callback callback, void* arg)
+server_timer_at(struct timeval at, int period_ms, server_timer_callback callback, void* arg)
 {
-    return add_timer(at, ms, callback, arg);
+    return add_timer(at, period_ms, callback, arg);
 }
