@@ -637,22 +637,6 @@ poller_timer (mstime when, void *arg)
 	return 1;
 }
 
-static int
-prep_timer (mstime when, void* arg)
-{
-	rb_poller* poll;
-
-	poll = (rb_poller*)arg;
-	if (server_timer (poll->interval, poller_timer, poll) == -1)
-		log_error ("couldn't setup poller timer");
-
-	/* Run the poll the first time */
-	poller_timer (when, poll);
-
-	return 0;
-}
-
-
 void
 rb_poll_engine_init (void)
 {
@@ -662,10 +646,17 @@ rb_poll_engine_init (void)
 	 */
 	rb_poller * poll;
 	int rand_delay;
+	struct timeval now;
+	if (gettimeofday(&now, NULL) == -1) {
+	    err(1, "gettimeofday failed");
+	}
 
 	for (poll = g_state.polls; poll != NULL; poll = poll->next) {
-		rand_delay = rand() % poll->interval;
-		if (server_oneshot(rand_delay, prep_timer, poll) == -1)
+	        struct timeval start;
+	        start = now;
+		start.tv_sec += rand() % poll->interval;
+
+		if (server_timer_at(start, poll->interval, poller_timer, poll) == -1)
 		    err(1, "couldn't setup timer");
 	}
 }

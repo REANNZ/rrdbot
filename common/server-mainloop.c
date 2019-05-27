@@ -462,6 +462,12 @@ server_timer(int ms, server_timer_callback callback, void* arg)
 }
 
 int
+server_timer_at(struct timeval at, int ms, server_timer_callback callback, void* arg)
+{
+    return add_timer(at, ms, 0, callback, arg);
+}
+
+int
 server_oneshot(int ms, server_timer_callback callback, void* arg)
 {
     struct timeval interval;
