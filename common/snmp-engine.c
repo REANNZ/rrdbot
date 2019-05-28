@@ -835,7 +835,7 @@ request_flush_cb (mstime when, void *arg)
 {
 	snmp_flush_pending = 0;
 	request_flush_all (when);
-	return 0;
+	return 0; // unrepeated
 }
 
 static struct request*
@@ -976,7 +976,7 @@ snmp_engine_request (const char *hostname, const char *port,
 
 	/* Otherwise flush on the idle callback */
 	else if (!snmp_flush_pending) {
-		server_oneshot (0, request_flush_cb, NULL);
+		server_timer (0, request_flush_cb, NULL);
 		snmp_flush_pending = 1;
 	}
 

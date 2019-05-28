@@ -50,7 +50,7 @@ int     server_stopped();
 int     server_watch(int fd, int type, server_socket_callback callback, void* arg);
 void    server_unwatch(int fd);
 int     server_timer(int length, server_timer_callback callback, void* arg);
-int     server_oneshot(int length, server_timer_callback callback, void* arg);
+int     server_timer_at(struct timeval, int, server_timer_callback, void*);
 uint64_t server_get_time();
 
 #endif /* __SERVER_MAINLOOP_H__ */
