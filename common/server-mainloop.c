@@ -82,11 +82,18 @@ add_timer(struct timeval at, int period_ms, server_timer_callback callback, void
     struct timeval interval;
     timer_callback* cb;
 
-    ASSERT (period_ms);
+    ASSERT(period_ms >= 0);
     ASSERT(callback != NULL);
 
-    interval.tv_sec = period_ms / 1000;
-    interval.tv_usec = (period_ms % 1000) * 1000; /* into micro seconds */
+    if (period_ms == 0)
+    {
+	timerclear(&interval); /* one-shot */
+    }
+    else
+    {
+	interval.tv_sec = period_ms / 1000;
+	interval.tv_usec = (period_ms % 1000) * 1000; /* into micro seconds */
+    }
 
     cb = (timer_callback*)calloc(1, sizeof(*cb));
     if(!cb)
@@ -234,10 +241,8 @@ server_run()
                     if(timercmp(&(timcb->at), &current, <=))
                         memcpy(&(timcb->at), &current, sizeof(timcb->at));
                 }
-
-                /* Otherwise remove it. Either one shot, or returned 0 */
-                else
-                {
+		else
+		{
                     timcb = remove_timer(timcb);
                     continue;
                 }
