@@ -49,9 +49,7 @@ database. The configuration files describe what to poll and where the resulting
 RRD files are. 
 .Pp
 The configuration files may be used by more than one program, for example 
-.Xr rrdbotd 8 ,
-or 
-.Xr rrdbot-create 8 .
+.Xr rrdbotd 8 .
 Some settings are shared between programs, while many are program specific. 
 Settings not recognized are ignored.
 .Pp
@@ -143,82 +141,6 @@ utility.
 .It Ar timeout
 The timeout (in seconds) to wait for an SNMP response.
 .El
-.Sh CREATE SETTINGS
-These settings are used by the 
-.Xr rrdbot-create 8
-tool to automatically create RRD files for you. Put these settings under the 
-.Ar [create]
-header.
-.Bl -tag -width Fl
-.It Ar archive
-The archives of values you would like to keep in your RRD. There can be multiple 
-archives specified, separated by commas. The syntax of an archive is as follows:
-.Bd -literal -offset indent
-<count>/<unit> * <how-many> <units>
-.Ed
-.Pp
-The example below describes three archives of "2 per minute for 1 week", 
-"4 per hour for 3 months", "3 per day for 1 year":
-.Bd -literal -offset indent
-2/minute * 1 weeks, 4/hour * 3 months, 3/day * 1 year
-.Ed
-.Pp
-[ Required for 
-rrdbot-create 8
-]
-.It Ar cf
-The consolidation functions to use to consolidate RRD values when 
-archiving them. This applies to all fields in the RRD. There can be multiple
-functions specified, separated by commas. The valid functions are:
-.Bl -tag -width Fl
-.It Ar AVERAGE 
-Average out the values when archiving them.
-.It Ar LAST
-Use the last value in the set to be archived.
-.It Ar MAX
-Use the maximum value in the set to be archived.
-.It Ar MIN
-Use the minimum value in the set to be archived.
-.El
-.Pp
-[ Default: 
-.Ar AVERAGE 
-]
-.It Ar <field>.max
-The maximum value for the field. Use the character
-.Ar U
-to specify that there is no maximum (unbounded).
-.Pp
-[ Default: 
-.Ar U 
-]
-.It Ar <field>.min
-The minimum value for the field. Use the character 
-.Ar U 
-to specify that there is no minimum (unbounded).
-.Pp
-[ Default: 
-.Ar U 
-]
-.It Ar <field>.type
-The type of values that will be stored in this field. For more info see the 
-.Xr rrdcreate 1
-manual. The types are:
-.Bl -tag -width Fl
-.It Ar ABSOLUTE 
-Used for counters that get reset when read.
-.It Ar COUNTER
-For values that increment between reads. 
-.It Ar DERIVE
-Used to measure rates of increase or decrease.
-.It Ar GAUGE
-For values that are current, for example the temperature.
-.El
-.Pp
-[ Default:
-.Ar ABSOLUTE
-]
-.El
 .Sh FILE LOCATIONS
 To determine the default location for the configuration files and RRD files 
 run this command:
@@ -265,9 +187,6 @@ The default location for an RRD file can be overridden by using the
 .Ar rrd
 option in the configuration file.
 .Pp
-Once you have configuration files in place, you can use the 
-.Xr rrdbot-create 8
-tool to create the needed RRD files in the appropriate places.
 .Sh MULTIPLE AGENTS
 .Xr rrdbotd 8 
 supports failover between multiple agents. If an SNMP query fails on one agent
@@ -298,7 +217,6 @@ snmp://public@example.com/ifInUcastPkts?ifDescr=eth0
 .Ed
 .Sh SEE ALSO
 .Xr rrdbotd 8 ,
-.Xr rrdbot-create 8 ,
 .Xr rrdbot-get 1 ,
 .Xr rrdtool 1
 .Sh AUTHOR
