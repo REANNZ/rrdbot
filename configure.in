@@ -45,8 +45,6 @@ LIBS="$PTHREAD_LIBS $LIBS"
 CFLAGS="$CFLAGS $PTHREAD_CFLAGS -D_POSIX_PTHREAD_SEMANTICS"
 
 dnl Checks for libraries
-AC_CHECK_LIB(rrd, rrd_update, ,
-    [echo "ERROR: librrd not found."; exit 1])
 dnl May need these for getaddrinfo
 AC_CHECK_LIB(nsl, nis_lookup)
 AC_CHECK_LIB(socket, getaddrinfo)
@@ -58,7 +56,6 @@ AC_CHECK_MEMBERS([struct dirent.d_type],,,[#include <dirent.h>])
 
 dnl Check for header files.
 AC_HEADER_STDC
-AC_CHECK_HEADERS([rrd.h], , [echo "ERROR: rrd headers not found"])
 AC_CHECK_HEADERS([unistd.h stdio.h stddef.h stdlib.h assert.h errno.h stdarg.h string.h netdb.h ], ,
     [echo "ERROR: Required C header missing"; exit 1])
 AC_CHECK_HEADERS([sys/socket.h sys/cdefs.h])
