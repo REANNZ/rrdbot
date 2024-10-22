@@ -58,7 +58,6 @@
 
 # /tools/
 /tools/.deps
-/tools/rrdbot-create
 /tools/rrdbot-get
 /tools/Makefile
 /tools/Makefile.in
